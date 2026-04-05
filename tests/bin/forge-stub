@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+
+import json
+import os
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+FIXTURES_DIR = ROOT / "tests" / "fixtures"
+OK_TEXT = (FIXTURES_DIR / "ok.txt").read_text(encoding="utf-8").rstrip("\n")
+ERROR_TEXT = (FIXTURES_DIR / "error.txt").read_text(encoding="utf-8").rstrip("\n")
+COMMANDS_PORCELAIN = "\n".join(
+    [
+        "COMMAND    TYPE    DESCRIPTION",
+        "sage    AGENT    Strategic reasoning agent",
+        "muse    AGENT    Planning agent",
+        "new    CUSTOM    Start a new conversation",
+        "info    CUSTOM    Show conversation info",
+        "doctor    CUSTOM    Run shell diagnostics",
+        "sync    CUSTOM    Sync the workspace",
+    ]
+)
+LOG_ENV_KEYS = [
+    "FORGE_SESSION__MODEL_ID",
+    "FORGE_SESSION__PROVIDER_ID",
+    "FORGE_REASONING__EFFORT",
+    "_FORGE_CONVERSATION_ID",
+    "_FORGE_ACTIVE_AGENT",
+    "FORGE_STUB_WORKSPACE_INFO_STATUS",
+]
+
+
+def normalize_argv(argv: list[str]) -> tuple[str, list[str]]:
+    normalized = list(argv)
+    agent = "forge"
+    if normalized[:1] == ["--agent"]:
+        if len(normalized) < 2:
+            raise ValueError("missing agent id after --agent")
+        agent = normalized[1]
+        normalized = normalized[2:]
+    return agent, normalized
+
+
+def emit(stream, text: str) -> None:
+    if not text:
+        return
+    stream.write(text)
+    if not text.endswith("\n"):
+        stream.write("\n")
+
+
+def log_invocation(raw_argv: list[str], argv: list[str], agent: str, exit_code: int) -> None:
+    log_path = os.environ.get("FORGE_STUB_LOG_PATH")
+    if not log_path:
+        return
+
+    entry = {
+        "raw_argv": raw_argv,
+        "argv": argv,
+        "agent": agent,
+        "cwd": os.getcwd(),
+        "exit_code": exit_code,
+        "env": {key: os.environ.get(key, "") for key in LOG_ENV_KEYS},
+    }
+
+    path = Path(log_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        json.dump(entry, handle, ensure_ascii=False)
+        handle.write("\n")
+
+
+def workspace_info_status() -> str:
+    return os.environ.get("FORGE_STUB_WORKSPACE_INFO_STATUS", "indexed")
+
+
+def main() -> int:
+    raw_argv = sys.argv[1:]
+    stdout = ""
+    stderr = ""
+    exit_code = 0
+
+    try:
+        agent, argv = normalize_argv(raw_argv)
+    except ValueError:
+        agent = "forge"
+        argv = []
+        stderr = ERROR_TEXT
+        exit_code = 1
+        log_invocation(raw_argv, argv, agent, exit_code)
+        emit(sys.stderr, stderr)
+        return exit_code
+
+    if argv == ["list", "commands", "--porcelain"]:
+        stdout = COMMANDS_PORCELAIN
+    elif argv == ["conversation", "new"]:
+        stdout = os.environ.get("FORGE_STUB_CONVERSATION_ID", "cid-stub-001")
+    elif len(argv) >= 5 and argv[:2] == ["cmd", "execute"] and argv[2] == "--cid":
+        cid = argv[3]
+        command_name = argv[4]
+        input_text = argv[5] if len(argv) >= 6 else ""
+        stdout = f"cmd execute ok cid={cid} command={command_name} input={input_text}"
+    elif len(argv) == 4 and argv[0] == "-p" and argv[2] == "--cid":
+        prompt = argv[1]
+        cid = argv[3]
+        stdout = f"interactive prompt ok cid={cid} input={prompt}"
+    elif argv == ["config", "get", "reasoning-effort"]:
+        stdout = os.environ.get("FORGE_STUB_REASONING_EFFORT", "")
+    elif len(argv) == 4 and argv[:3] == ["config", "set", "reasoning-effort"]:
+        stdout = f"config reasoning-effort set to {argv[3]}"
+    elif argv[:1] == ["commit"]:
+        preview = "--preview" in argv
+        text_args = [arg for arg in argv[1:] if arg not in {"--preview", "--max-diff", os.environ.get("_FORGE_MAX_COMMIT_DIFF", "")}]
+        if "--max-diff" in argv:
+            filtered = []
+            skip_next = False
+            for arg in argv[1:]:
+                if skip_next:
+                    skip_next = False
+                    continue
+                if arg == "--preview":
+                    continue
+                if arg == "--max-diff":
+                    skip_next = True
+                    continue
+                filtered.append(arg)
+            text_args = filtered
+        base_message = os.environ.get("FORGE_STUB_COMMIT_MESSAGE", "feat: stub commit")
+        if text_args:
+            stdout = f"{base_message} [{' '.join(text_args)}]"
+        else:
+            stdout = base_message
+        if not preview:
+            stdout = f"COMMITTED: {stdout}"
+    elif argv == ["fish", "doctor"]:
+        stdout = OK_TEXT
+    elif argv == ["fish", "keyboard"]:
+        stdout = OK_TEXT
+    elif argv == ["fish", "rprompt"]:
+        stdout = (
+            "rprompt"
+            f" agent={os.environ.get('_FORGE_ACTIVE_AGENT', '')}"
+            f" cid={os.environ.get('_FORGE_CONVERSATION_ID', '')}"
+            f" model={os.environ.get('FORGE_SESSION__MODEL_ID', '')}"
+            f" provider={os.environ.get('FORGE_SESSION__PROVIDER_ID', '')}"
+        )
+    elif argv == ["zsh", "rprompt"]:
+        override = os.environ.get("FORGE_STUB_RPROMPT_RAW")
+        if override is not None:
+            stdout = override
+        else:
+            agent = os.environ.get("_FORGE_ACTIVE_AGENT", "forge") or "forge"
+            session_model = os.environ.get("FORGE_SESSION__MODEL_ID") if "FORGE_SESSION__MODEL_ID" in os.environ else None
+            model = session_model if session_model is not None else os.environ.get("FORGE_STUB_DEFAULT_MODEL", "")
+            token_count = os.environ.get("FORGE_STUB_RPROMPT_TOKENS", "")
+            cost = os.environ.get("FORGE_STUB_RPROMPT_COST", "")
+            active = bool(token_count)
+
+            if active:
+                stdout = f" %B%F{{15}}{agent.upper()}%f%b"
+                stdout += f" %B%F{{15}}{token_count}%f%b"
+                if cost:
+                    stdout += f" %B%F{{2}}{cost}%f%b"
+                if model:
+                    stdout += f" %F{{134}}{model}%f"
+            else:
+                stdout = f" %B%F{{240}}{agent.upper()}%f%b"
+                if session_model is not None:
+                    stdout += f" %F{{240}}{model}%f"
+                elif model:
+                    stdout += f" %F{{240}}{model}%f"
+    elif len(argv) == 3 and argv[:2] == ["workspace", "info"]:
+        if workspace_info_status() == "missing":
+            stderr = ERROR_TEXT
+            exit_code = 1
+        else:
+            stdout = f"workspace info ok path={argv[2]}"
+    elif argv == ["workspace", "sync", "--init"]:
+        stdout = OK_TEXT
+    elif len(argv) == 3 and argv[:2] == ["workspace", "sync"]:
+        stdout = f"workspace sync ok path={argv[2]}"
+    else:
+        stderr = ERROR_TEXT
+        exit_code = 1
+
+    log_invocation(raw_argv, argv, agent, exit_code)
+    emit(sys.stdout, stdout)
+    emit(sys.stderr, stderr)
+    return exit_code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
