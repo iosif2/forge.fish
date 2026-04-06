@@ -132,6 +132,9 @@ function _forge_accept_line
             # Forge output without cursor-up interference.
             # NOTE: do NOT queue clear-commandline before this — it would wipe
             # the buffer we set here before execute fires.
+            # Hide cursor so the _forge_deferred_exec text Fish echoes before
+            # running the command is not perceived as a flash.
+            printf '\033[?25l'
             commandline -r _forge_deferred_exec
             commandline -f execute
             return
@@ -187,6 +190,11 @@ function _forge_accept_line
             # Hand off to _forge_deferred_exec via Fish's normal command
             # execution path so the new prompt is drawn correctly below
             # Forge output without cursor-up interference.
+            # Save the original buffer so _forge_deferred_exec can echo it
+            # before forge output — without this the user's ": text" input
+            # is silently erased and replaced by forge output.
+            set -g _FORGE_DEFERRED_EXEC_ECHO "$buf"
+            printf '\033[?25l'
             commandline -r _forge_deferred_exec
             commandline -f execute
             return

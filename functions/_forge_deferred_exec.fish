@@ -16,14 +16,22 @@
 #        putting "_forge_deferred_exec" in the commandline buffer.
 
 function _forge_deferred_exec
+    # Erase the "_forge_deferred_exec" line that Fish echoed before running us
+    # and restore cursor visibility (cursor was hidden in the key binding to
+    # prevent _forge_deferred_exec from briefly flashing on screen).
+    # Do this first — before history delete — to minimise the visible window.
+    if status is-interactive; and test -t 1
+        printf '\033[1A\r\033[2K\033[?25h'
+    end
+
     # Remove this dispatch wrapper from Fish history so the user never sees it.
     builtin history delete -- _forge_deferred_exec 2>/dev/null
 
-    # Erase the "_forge_deferred_exec" line that Fish echoed before running us.
-    # After Enter the cursor sits on a fresh line below the command line; move
-    # up one line and clear it so forge output begins without the wrapper name.
-    if status is-interactive; and test -t 1
-        printf '\033[1A\r\033[2K'
+    # If the caller saved the original commandline (e.g. ": hello world"),
+    # echo it before forge output so the user can see what they sent.
+    if test -n "$_FORGE_DEFERRED_EXEC_ECHO"
+        printf '%s\n' "$_FORGE_DEFERRED_EXEC_ECHO"
+        set --erase _FORGE_DEFERRED_EXEC_ECHO
     end
 
     if test "$_FORGE_PENDING_EXEC" != 1
