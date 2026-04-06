@@ -54,13 +54,43 @@ function _forge_completion
         return 0
     end
 
-    # Handle :command completion using Fish's native command completion UI.
-    # We register synthetic ":name" functions just-in-time, then delegate to
-    # the built-in pager so the buffer keeps the required no-space ":command"
-    # syntax.
+    # Handle :command completion using the same porcelain rows and fzf layout
+    # as the zsh plugin.
     if string match -rq '^:([a-zA-Z][a-zA-Z0-9_-]*)?$' -- "$lbuffer"
-        _forge_refresh_colon_command_functions
-        commandline -f complete
+        set -l filter_text (string sub -s 2 -- "$lbuffer")
+        set -l commands_list (_forge_get_commands | string collect)
+        if test -n "$commands_list"
+            set -l candidates_file (mktemp)
+            or return 1
+            printf '%s\n' "$commands_list" > "$candidates_file"
+
+            set -l fzf_args \
+                --header-lines=1 \
+                --delimiter="$_FORGE_DELIMITER" \
+                --nth=1 \
+                '--prompt=Command ❯ '
+
+            if test -n "$filter_text"
+                set fzf_args $fzf_args --query="$filter_text"
+            end
+
+            set -g _FORGE_FZF_SELECTION ""
+            _forge_fzf_from_stdin --input-file "$candidates_file" $fzf_args
+            rm -f "$candidates_file"
+            set -l selected "$_FORGE_FZF_SELECTION"
+
+            if test -n "$selected"
+                set -l command_match (string match -r '^([^[:space:]]+)' -- (string trim -- "$selected"))
+                if test (count $command_match) -ge 2
+                    set -l command_name "$command_match[2]"
+                    set -l rbuffer (string sub -s (math $cursor_pos + 1) -- "$buf")
+                    commandline -r ":$command_name $rbuffer"
+                    commandline -C (math 2 + (string length -- "$command_name"))
+                end
+            end
+        end
+
+        commandline -f repaint
         return 0
     end
 
