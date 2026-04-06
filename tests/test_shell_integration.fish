@@ -225,6 +225,17 @@ function test_at_completion_wraps_selected_path
     or return 1
 end
 
+function test_fzf_wrappers_force_posix_shell_for_preview_commands
+    set -l repo_root (pwd)
+    set -l fzf_definition (string collect < "$repo_root/functions/_forge_fzf.fish")
+    forge_test_assert_contains 'env SHELL=/bin/sh fzf' "$fzf_definition" 'fzf wrapper should force a POSIX shell so preview commands match the zsh contract'
+    or return 1
+
+    set -l tty_definition (string collect < "$repo_root/functions/_forge_fzf_from_stdin.fish")
+    forge_test_assert_contains 'SHELL=/bin/sh' "$tty_definition" 'tty-backed fzf wrapper should also force a POSIX shell for preview commands'
+    or return 1
+end
+
 function test_reset_adds_single_separator_for_visible_output_handoff
     forge_test_reset
 
@@ -376,6 +387,7 @@ for test_name in \
     test_config_reasoning_effort_calls_binary \
     test_exec_marks_padding_for_following_reset \
     test_at_completion_wraps_selected_path \
+    test_fzf_wrappers_force_posix_shell_for_preview_commands \
     test_reset_adds_single_separator_for_visible_output_handoff \
     test_rprompt_falls_back_to_default_model_without_session_override \
     test_rprompt_uses_cached_zsh_output \

@@ -58,6 +58,7 @@ function _forge_fzf_from_stdin --description 'Run fzf with candidates from stdin
         end
 
         set -l shell_command_parts \
+            "SHELL=/bin/sh" \
             "FZF_DEFAULT_COMMAND=$escaped_default_command" \
             fzf \
             --reverse \

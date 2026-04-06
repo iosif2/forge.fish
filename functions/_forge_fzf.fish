@@ -6,5 +6,5 @@
 # widgets need their own matching files under functions/.
 
 function _forge_fzf
-    fzf --reverse --exact --cycle --select-1 --height 80% --no-scrollbar --ansi --color="header:bold" $argv
+    env SHELL=/bin/sh fzf --reverse --exact --cycle --select-1 --height 80% --no-scrollbar --ansi --color="header:bold" $argv
 end
