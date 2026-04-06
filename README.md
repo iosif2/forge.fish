@@ -2,46 +2,88 @@
 
 # forge.fish
 
-Fish shell integration for the [`forgecode`](https://github.com/antinomyhq/forgecode) project's `forge` CLI.
+**Turn Forge into a shell-native workflow for Fish.**
 
-> [!WARNING]
-> This project is currently under active development. Commands, key bindings, and workflows may evolve.
+Use prompt-native `:` commands, fuzzy `@` file picking, and direct keyboard-driven execution without falling back to a separate TUI or memorizing a pile of subcommands.
 
-A modern Fish plugin for running `forge` workflows directly from your command line with completions, inline `:` commands, and fast `@`-based file picking.
+[![forge.fish demo GIF](./assets/forge-fish-demo.gif)](./assets/forge-fish-demo.cast)
 
-The completion support in this project is based on the `forgecode` project's Zsh completion and adapted for Fish.
+[Install in 30 seconds](#30-second-install) • [Supported versions](#supported-versions) • [Known limitations](#known-limitations)
 
 </div>
 
-## Highlights
+> [!WARNING]
+> This project is under active development. The Fish integration tracks Forge's shell workflow closely, but commands and UX details can continue to evolve.
 
-| Capability | What it does |
-| --- | --- |
-| Command completions | Adds completions for the `forge` command inside Fish |
-| Inline `:` workflows | Dispatches Forge actions directly from the Fish command line |
-| `@` file picker | Opens a fuzzy file picker powered by `fzf` |
-| Shell-friendly flows | Includes helpers for conversations, agents, commit/suggest flows, and workspace actions |
-| Keyboard integration | Supports direct execution and picker-driven workflows with familiar keys |
+## The problem this plugin solves
 
-## Requirements
+The `forge` CLI is powerful, but plain Fish still leaves a lot of shell friction in the loop:
 
-For the full experience, have these tools available in your shell:
+- you have to remember or rediscover Forge subcommands
+- switching between agents and workflows is not built into your prompt
+- attaching files from the current workspace is slower than it should be
+- Fish users do not get the same shell-native workflow that the upstream Zsh integration already has
 
-| Tool | Notes |
-| --- | --- |
-| `fish` | Required |
-| `forge` | Required |
-| `fzf` | Required for fuzzy picking |
-| `fd` or `fdfind` | Recommended for `@` file picking |
-| `bat` | Optional, for nicer previews |
+**forge.fish** fixes that by bringing the Forge workflow directly into Fish:
 
-## Install
+- press <kbd>Tab</kbd> after `:` to browse Forge commands in `fzf`
+- press <kbd>Tab</kbd> after `@` to fuzzy-pick files and directories into the prompt
+- press <kbd>Enter</kbd> on a Forge `:` command to run it from the command line
+- keep working in the same shell session instead of bouncing between tools
 
-Install with Fisher:
+## 30-second install
+
+Prerequisites:
+
+- required: `fish`, `forge`, `fzf`
+- recommended: `fd` or `fdfind`
+- optional: `bat`
+
+If you already use Fisher:
 
 ```fish
 fisher install iosif2/forge.fish
+exec fish
 ```
+
+If you do not have Fisher yet:
+
+```fish
+curl -sL https://git.io/fisher | source && fisher install jorgebucaran/fisher
+fisher install iosif2/forge.fish
+exec fish
+```
+
+## Supported versions
+
+This repository currently documents a **verified baseline** plus the **minimum tool versions enforced by `:doctor`**:
+
+| Component | Verified in this repo | Minimum / note |
+| --- | --- | --- |
+| Fish | `4.5.0` | Verified baseline for this README/demo |
+| Forge CLI | `2.6.0` | Verified baseline for this README/demo |
+| `fzf` | `0.70.0` | `0.36.0+` required for interactive features |
+| `fd` / `fdfind` | `10.4.2` | `10.0.0+` recommended for file discovery |
+| `bat` | `0.26.1` | Optional, but `0.20.0+` expected for rich previews |
+
+If you are outside this baseline, the plugin may still work, but this repo does not maintain a broader compatibility matrix yet.
+
+## Known limitations
+
+- Key bindings are installed only in **interactive Fish sessions**. Scripted runs like `fish -c ...` will not get the `Tab` and `Enter` integration.
+- Interactive Forge execution depends on a writable **TTY**. In headless or non-TTY environments, non-interactive flows work better than full prompt-driven sessions.
+- The `@` picker is best with `fzf` plus `fd`/`fdfind`. Without those tools, file-picking is limited or unavailable.
+- `bat` is optional. If it is missing, previews fall back to plain `cat` output.
+
+## What you get
+
+| Capability | What it does |
+| --- | --- |
+| `:command` picker | Browse Forge commands with `fzf` directly from Fish |
+| `@` file picker | Insert `@[path]` references from the current workspace |
+| Inline prompt workflows | Run `:new`, `:suggest`, `:doctor`, `:conversation`, and more from the prompt |
+| Agent switching | Move between agent flows without leaving the shell |
+| Prompt integration | Keep Forge-aware state in your active Fish session |
 
 ## Quick start
 
