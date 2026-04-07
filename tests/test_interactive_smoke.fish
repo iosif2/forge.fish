@@ -6,7 +6,7 @@ source "$test_dir/fixtures/extension.fish"
 forge_test_bootstrap
 forge_test_setup_tmpdir
 
-function _forge_start_background_update
+function _forge_update_start
     return 0
 end
 
@@ -14,8 +14,8 @@ function test_default_interactive_prompt
     forge_test_reset
     set -gx FORGE_SYNC_ENABLED false
 
-    _forge_action_default "" "Hi"
-    _forge_deferred_exec >/dev/null
+    _forge_dispatch_default "" "Hi"
+    _forge_run_deferred >/dev/null
     forge_test_assert_eq "cid-stub-001" "$_FORGE_CONVERSATION_ID" "interactive default prompt should persist the generated conversation id"
     or return 1
     forge_test_assert_log_python 'len(entries) == 2 and entries[0]["argv"] == ["conversation", "new"] and entries[1]["raw_argv"] == ["--agent", "forge", "-p", "Hi", "--cid", "cid-stub-001"] and entries[1]["argv"] == ["-p", "Hi", "--cid", "cid-stub-001"]' "default interactive prompt should use forge as the implicit agent"
@@ -26,8 +26,8 @@ function test_sage_interactive_prompt
     forge_test_reset
     set -gx FORGE_SYNC_ENABLED false
 
-    _forge_action_default sage "hello"
-    _forge_deferred_exec >/dev/null
+    _forge_dispatch_default sage "hello"
+    _forge_run_deferred >/dev/null
     forge_test_assert_eq "sage" "$_FORGE_ACTIVE_AGENT" "interactive sage prompt should activate sage"
     or return 1
     forge_test_assert_log_python 'len(entries) == 3 and entries[0]["argv"] == ["list", "commands", "--porcelain"] and entries[1]["argv"] == ["conversation", "new"] and entries[2]["raw_argv"] == ["--agent", "sage", "-p", "hello", "--cid", "cid-stub-001"]' "sage interactive prompt should prefix the explicit agent"
@@ -38,8 +38,8 @@ function test_muse_interactive_prompt
     forge_test_reset
     set -gx FORGE_SYNC_ENABLED false
 
-    _forge_action_default muse "hello"
-    _forge_deferred_exec >/dev/null
+    _forge_dispatch_default muse "hello"
+    _forge_run_deferred >/dev/null
     forge_test_assert_eq "muse" "$_FORGE_ACTIVE_AGENT" "interactive muse prompt should activate muse"
     or return 1
     forge_test_assert_log_python 'len(entries) == 3 and entries[0]["argv"] == ["list", "commands", "--porcelain"] and entries[1]["argv"] == ["conversation", "new"] and entries[2]["raw_argv"] == ["--agent", "muse", "-p", "hello", "--cid", "cid-stub-001"]' "muse interactive prompt should prefix the explicit agent"

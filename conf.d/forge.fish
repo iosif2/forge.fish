@@ -1,7 +1,7 @@
 # This file owns session-scoped shell wiring: prompt wrappers, key bindings, and shared Forge globals.
 set -l __forge_plugin_root (path dirname (path dirname (status filename)))
-if test -f "$__forge_plugin_root/functions/_forge_action_conversation_helpers.fish"
-    source "$__forge_plugin_root/functions/_forge_action_conversation_helpers.fish"
+if test -f "$__forge_plugin_root/functions/_forge_conversation_helpers.fish"
+    source "$__forge_plugin_root/functions/_forge_conversation_helpers.fish"
 end
 set --erase __forge_plugin_root
 
@@ -205,7 +205,7 @@ end
 function : --description 'Run Forge default : prompt through normal Fish command execution'
     # The keybinding path rewrites ":" into a real command so Fish redraw/history match normal command execution.
     if test "$_FORGE_PENDING_EXEC" = 1
-        _forge_deferred_exec
+        _forge_run_deferred
         return $status
     end
 
@@ -213,9 +213,9 @@ function : --description 'Run Forge default : prompt through normal Fish command
         return 0
     end
 
-    _forge_action_default '' (string join ' ' -- $argv)
+    _forge_dispatch_default '' (string join ' ' -- $argv)
     if test "$_FORGE_PENDING_EXEC" = 1
-        _forge_deferred_exec
+        _forge_run_deferred
         return $status
     end
 
@@ -386,8 +386,8 @@ function _forge_uninstall_restore_bindings --description 'Restore Fish bindings 
 end
 
 function _forge_install_colon_completions --description 'Refresh synthetic :command functions used by Fish native completion'
-    if functions -q _forge_refresh_colon_command_functions
-        _forge_refresh_colon_command_functions
+    if functions -q _forge_refresh_colons
+        _forge_refresh_colons
     end
 end
 
@@ -396,14 +396,14 @@ function _forge_install_bindings --description 'Install Forge key bindings for t
         return 0
     end
 
-    bind --mode default \r _forge_accept_line
-    bind --mode default \n _forge_accept_line
-    bind --mode default \t _forge_completion
+    bind --mode default \r _forge_accept
+    bind --mode default \n _forge_accept
+    bind --mode default \t _forge_complete
 
     if contains -- insert (bind --list-modes 2>/dev/null)
-        bind --mode insert \r _forge_accept_line
-        bind --mode insert \n _forge_accept_line
-        bind --mode insert \t _forge_completion
+        bind --mode insert \r _forge_accept
+        bind --mode insert \n _forge_accept
+        bind --mode insert \t _forge_complete
     end
 end
 

@@ -9,7 +9,7 @@ forge_test_setup_tmpdir
 function test_commands_cache
     forge_test_reset
 
-    set -l commands (_forge_get_commands | string collect)
+    set -l commands (_forge_commands_get | string collect)
     forge_test_assert_contains "COMMAND    TYPE    DESCRIPTION" "$commands" "commands header should be present"
     or return 1
     forge_test_assert_contains "sage    AGENT" "$commands" "sage agent row should be present"
@@ -17,7 +17,7 @@ function test_commands_cache
     forge_test_assert_contains "new    CUSTOM" "$commands" "new custom row should be present"
     or return 1
 
-    set -l cached (_forge_get_commands | string collect)
+    set -l cached (_forge_commands_get | string collect)
     forge_test_assert_eq "$commands" "$cached" "cached commands output should remain stable"
     or return 1
     forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["list", "commands", "--porcelain"]' "commands should be fetched only once per reset"
@@ -27,7 +27,7 @@ end
 function test_agent_branch
     forge_test_reset
 
-    _forge_action_default sage ""
+    _forge_dispatch_default sage ""
     forge_test_assert_eq "sage" "$_FORGE_ACTIVE_AGENT" "agent branch should activate sage"
     or return 1
     forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["list", "commands", "--porcelain"]' "agent selection should only consult list commands"
@@ -37,7 +37,7 @@ end
 function test_custom_preprocessing
     forge_test_reset
 
-    _forge_action_default new ""
+    _forge_dispatch_default new ""
     forge_test_assert_eq "cid-stub-001" "$_FORGE_CONVERSATION_ID" "custom branch should create a conversation id"
     or return 1
     forge_test_assert_log_python 'len(entries) == 3 and entries[1]["argv"] == ["conversation", "new"] and entries[2]["argv"] == ["cmd", "execute", "--cid", "cid-stub-001", "new"]' "custom branch should create a cid and execute the command"

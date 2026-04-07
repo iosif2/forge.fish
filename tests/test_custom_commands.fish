@@ -9,7 +9,7 @@ forge_test_setup_tmpdir
 function test_custom_creates_conversation_once
     forge_test_reset
 
-    _forge_action_default new "hello world"
+    _forge_dispatch_default new "hello world"
     forge_test_assert_eq "cid-stub-001" "$_FORGE_CONVERSATION_ID" "first custom call should persist the generated conversation id"
     or return 1
     forge_test_assert_log_python 'len(entries) == 3 and entries[1]["argv"] == ["conversation", "new"] and entries[2]["argv"] == ["cmd", "execute", "--cid", "cid-stub-001", "new", "hello world"]' "first custom execution should create a cid before running cmd execute"
@@ -20,7 +20,7 @@ function test_custom_reuses_existing_conversation
     forge_test_reset
     set -g _FORGE_CONVERSATION_ID "cid-existing"
 
-    _forge_action_default new "follow up"
+    _forge_dispatch_default new "follow up"
     forge_test_assert_eq "cid-existing" "$_FORGE_CONVERSATION_ID" "existing conversation id should be reused"
     or return 1
     forge_test_assert_log_python 'len(entries) == 2 and entries[0]["argv"] == ["list", "commands", "--porcelain"] and entries[1]["argv"] == ["cmd", "execute", "--cid", "cid-existing", "new", "follow up"]' "custom execution should skip conversation new when cid already exists"
