@@ -6,6 +6,21 @@
 #   : <text>         - default action (send text to active agent)
 #   anything else    - normal shell command execution
 
+function _forge_commandline_supports_search_field
+    if set -q _FORGE_HAS_COMMANDLINE_SEARCH_FIELD
+        test "$_FORGE_HAS_COMMANDLINE_SEARCH_FIELD" = 1
+        return
+    end
+
+    if commandline --help 2>/dev/null | string match -q '*--search-field*'
+        set -g _FORGE_HAS_COMMANDLINE_SEARCH_FIELD 1
+        return 0
+    end
+
+    set -g _FORGE_HAS_COMMANDLINE_SEARCH_FIELD 0
+    return 1
+end
+
 function _forge_prepare_dispatch_lite --argument buffer
     # Lightweight version of _forge_prepare_dispatch.
     # Does NOT queue clear-commandline (would wipe deferred-exec buffer before
@@ -14,7 +29,14 @@ function _forge_prepare_dispatch_lite --argument buffer
     # Fish to scroll back to the original prompt position and overwrite that
     # output). Each code path in _forge_accept_line handles its own repaint or
     # clear-commandline at the appropriate time.
-    if commandline --paging-mode >/dev/null; or commandline --search-mode >/dev/null; or commandline --search-field >/dev/null
+    set -l _forge_cancel_modes 0
+    if commandline --paging-mode >/dev/null; or commandline --search-mode >/dev/null
+        set _forge_cancel_modes 1
+    else if _forge_commandline_supports_search_field; and commandline --search-field >/dev/null
+        set _forge_cancel_modes 1
+    end
+
+    if test "$_forge_cancel_modes" = 1
         commandline -f cancel
     end
 
