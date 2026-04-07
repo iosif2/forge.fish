@@ -10,10 +10,48 @@ set -l ok_text (forge_test_fixture_text ok.txt)
 function test_foreground_sync
     forge_test_reset
 
+    function _forge_exec_interactive
+        set -gx FORGE_STUB_INTERACTIVE yes
+        _forge_exec $argv
+    end
+
     set -l output (_forge_action_sync | string collect)
+    functions --erase _forge_exec_interactive
     forge_test_assert_contains "$ok_text" "$output" "foreground sync should return the happy-path fixture output"
     or return 1
-    forge_test_assert_log_python 'len(entries) == 1 and entries[0]["raw_argv"] == ["--agent", "forge", "workspace", "sync", "--init"] and entries[0]["argv"] == ["workspace", "sync", "--init"]' "foreground sync should use the agent-prefixed wrapper"
+    forge_test_assert_log_python 'len(entries) == 1 and entries[0]["raw_argv"] == ["--agent", "forge", "workspace", "sync", "--init", "."] and entries[0]["argv"] == ["workspace", "sync", "--init", "."]' "foreground sync should use the agent-prefixed wrapper with the current directory"
+    or return 1
+end
+
+function test_foreground_sync_forwards_explicit_workspace_path
+    forge_test_reset
+
+    function _forge_exec_interactive
+        set -gx FORGE_STUB_INTERACTIVE yes
+        _forge_exec $argv
+    end
+
+    set -l output (_forge_action_sync "tests" | string collect)
+    functions --erase _forge_exec_interactive
+    forge_test_assert_contains "$ok_text" "$output" "foreground sync should support an explicit workspace path"
+    or return 1
+    forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["workspace", "sync", "--init", "tests"]' "foreground sync should forward an explicit workspace path"
+    or return 1
+end
+
+function test_foreground_sync_init_uses_current_directory_by_default
+    forge_test_reset
+
+    function _forge_exec_interactive
+        set -gx FORGE_STUB_INTERACTIVE yes
+        _forge_exec $argv
+    end
+
+    set -l output (_forge_action_sync_init | string collect)
+    functions --erase _forge_exec_interactive
+    forge_test_assert_contains "$ok_text" "$output" "workspace init should return the happy-path fixture output"
+    or return 1
+    forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["workspace", "init", "."]' "workspace init should default to the current directory"
     or return 1
 end
 
@@ -30,6 +68,18 @@ function test_background_sync_after_workspace_info
 end
 
 test_foreground_sync
+or begin
+    forge_test_cleanup
+    exit 1
+end
+
+test_foreground_sync_forwards_explicit_workspace_path
+or begin
+    forge_test_cleanup
+    exit 1
+end
+
+test_foreground_sync_init_uses_current_directory_by_default
 or begin
     forge_test_cleanup
     exit 1

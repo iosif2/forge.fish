@@ -189,13 +189,13 @@ function _forge_accept_line
                 case copy
                     _forge_action_copy
                 case workspace-sync sync
-                    _forge_action_sync
+                    _forge_action_sync "$input_text"
                 case workspace-init sync-init
-                    _forge_action_sync_init
+                    _forge_action_sync_init "$input_text"
                 case workspace-status sync-status
-                    _forge_action_sync_status
+                    _forge_action_sync_status "$input_text"
                 case workspace-info sync-info
-                    _forge_action_sync_info
+                    _forge_action_sync_info "$input_text"
                 case provider-login login
                     _forge_action_login "$input_text"
                 case logout
