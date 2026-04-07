@@ -223,13 +223,6 @@ function _forge_finalize_dispatch --argument buffer clear_when_idle
         return 0
     end
 
-    if test "$_FORGE_SKIP_RESET" = 1
-        set --erase _FORGE_SKIP_RESET
-        set --erase _FORGE_OUTPUT_MODE
-        commandline -r ""
-        return 0
-    end
-
     # When visible output was produced, use commandline -f execute with an
     # empty buffer. execute causes Fish to draw a new prompt from the
     # CURRENT cursor position (below the output) rather than scrolling back
@@ -257,53 +250,85 @@ function _forge_finalize_dispatch --argument buffer clear_when_idle
     end
 end
 
+function _forge_parse_exact_colon_command --argument buffer
+    set -l captures (string match --regex '^:([a-zA-Z][a-zA-Z0-9_-]*)( (.*))?$' -- "$buffer")
+    if test (count $captures) -lt 2
+        return 1
+    end
+
+    set -l user_action "$captures[2]"
+    set -l input_text ''
+    if test (count $captures) -ge 4
+        set input_text "$captures[4]"
+    end
+
+    printf '%s\n%s\n' "$user_action" "$input_text"
+end
+
+function _forge_parse_colon_prompt_text --argument buffer
+    if not string match -q ':*' -- "$buffer"
+        return 1
+    end
+
+    # Treat every other :buffer as raw prompt text, preserving punctuation,
+    # whitespace, and embedded newlines. A single optional space after : is
+    # stripped for convenience so both ":hello" and ": hello" work.
+    set -l input_text (string sub -s 2 -- "$buffer")
+    if string match -q ' *' -- "$input_text"
+        set input_text (string sub -s 2 -- "$input_text")
+    end
+
+    printf '%s' "$input_text"
+end
+
+function _forge_execute_colon_command --argument buffer user_action input_text
+    # Use lite prep (no clear-commandline) so that if the action sets
+    # _FORGE_PENDING_EXEC we can still write _forge_deferred_exec into the
+    # buffer before queueing execute.
+    _forge_prepare_dispatch_lite "$buffer"
+
+    set user_action (_forge_normalize_action_name "$user_action")
+    _forge_dispatch_action "$user_action" "$input_text"
+    set -l dispatch_status $status
+    if test $dispatch_status -eq 2
+        return 0
+    end
+
+    _forge_finalize_dispatch "$buffer" 0
+end
+
+function _forge_execute_colon_prompt --argument buffer input_text
+    if test -z "$input_text"
+        commandline -r ""
+        commandline -f repaint
+        return 0
+    end
+
+    # Use lite prep (no clear-commandline) for the same reason as exact
+    # :command dispatch.
+    _forge_prepare_dispatch_lite "$buffer"
+    _forge_action_default '' "$input_text"
+    _forge_finalize_dispatch "$buffer" 1
+end
+
 function _forge_accept_line
     set -l buf (commandline)
 
-    # --- Pattern 1: exact single-line :command [args] ---
-    set -l captures (string match --regex '^:([a-zA-Z][a-zA-Z0-9_-]*)( (.*))?$' -- "$buf")
-    if test (count $captures) -ge 2
-        set -l user_action $captures[2]
+    set -l parsed_command (_forge_parse_exact_colon_command "$buf")
+    if test (count $parsed_command) -ge 1
+        set -l user_action "$parsed_command[1]"
         set -l input_text ''
-        if test (count $captures) -ge 4
-            set input_text $captures[4]
+        if test (count $parsed_command) -ge 2
+            set input_text "$parsed_command[2]"
         end
 
-        # Use lite prep (no clear-commandline) so that if the action sets
-        # _FORGE_PENDING_EXEC we can still write _forge_deferred_exec into the
-        # buffer before queueing execute.
-        _forge_prepare_dispatch_lite "$buf"
-
-        set user_action (_forge_normalize_action_name "$user_action")
-        _forge_dispatch_action "$user_action" "$input_text"
-        set -l dispatch_status $status
-        if test $dispatch_status -eq 2
-            return
-        end
-
-        _forge_finalize_dispatch "$buf" 0
+        _forge_execute_colon_command "$buf" "$user_action" "$input_text"
         return
     end
 
-    if string match -q ':*' -- "$buf"
-        # Treat every other :buffer as raw prompt text, preserving punctuation,
-        # whitespace, and embedded newlines. A single optional space after : is
-        # stripped for convenience so both ":hello" and ": hello" work.
-        set -l input_text (string sub -s 2 -- "$buf")
-        if string match -q ' *' -- "$input_text"
-            set input_text (string sub -s 2 -- "$input_text")
-        end
-
-        if test -z "$input_text"
-            commandline -r ""
-            commandline -f repaint
-            return 0
-        end
-
-        # Use lite prep (no clear-commandline) for the same reason as Pattern 1.
-        _forge_prepare_dispatch_lite "$buf"
-        _forge_action_default '' "$input_text"
-        _forge_finalize_dispatch "$buf" 1
+    set -l input_text (_forge_parse_colon_prompt_text "$buf" | string collect)
+    if test $status -eq 0
+        _forge_execute_colon_prompt "$buf" "$input_text"
         return
     end
 
