@@ -36,8 +36,7 @@ function _forge_exec_interactive
     # position. Mark that visible output occurred so _forge_accept_line can hand
     # the next prompt draw back to Fish through execute, which redraws the prompt
     # immediately without leaving a blank reader line behind.
-    set -g _FORGE_POST_OUTPUT_PADDING 1
+    set -g _FORGE_OUTPUT_MODE visible
     set -g _FORGE_RPROMPT_DIRTY 1
     return $cmd_status
 end
-

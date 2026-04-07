@@ -28,7 +28,7 @@ function _forge_exec
     $cmd $argv
     set -l cmd_status $status
 
-    set -g _FORGE_POST_OUTPUT_PADDING 1
+    set -g _FORGE_OUTPUT_MODE visible
     set -g _FORGE_RPROMPT_DIRTY 1
     return $cmd_status
 end

@@ -10,7 +10,7 @@ function _forge_log
 
     # Mark that this dispatch printed visible output so _forge_reset can avoid
     # forcing an immediate repaint over the log line.
-    set -g _FORGE_POST_OUTPUT_PADDING 1
+    set -g _FORGE_OUTPUT_MODE visible
 
     switch $level
         case error

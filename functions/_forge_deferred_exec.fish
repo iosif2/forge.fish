@@ -102,7 +102,7 @@ function _forge_deferred_exec
         printf '\r\n'
     end
 
-    set -g _FORGE_POST_OUTPUT_PADDING 1
+    set -g _FORGE_OUTPUT_MODE visible
     set -g _FORGE_RPROMPT_DIRTY 1
     _forge_start_background_sync
     _forge_start_background_update

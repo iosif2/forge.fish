@@ -285,7 +285,7 @@ function test_accept_line_uses_execute_handoff_after_interactive_exec
         forge_test_reset
         set -g _FORGE_CONVERSATION_ID cid-stub-001
         function _forge_exec_interactive
-            set -g _FORGE_POST_OUTPUT_PADDING 1
+            set -g _FORGE_OUTPUT_MODE visible
             set -g _FORGE_RPROMPT_DIRTY 1
         end
         function _forge_reset
@@ -326,12 +326,12 @@ function test_accept_line_uses_execute_handoff_after_interactive_exec
     or return 1
 end
 
-function test_exec_marks_padding_for_following_reset
+function test_exec_marks_output_mode_for_following_reset
     forge_test_reset
 
     _forge_exec fish keyboard >/dev/null
 
-    forge_test_assert_eq '1' "$_FORGE_POST_OUTPUT_PADDING" 'binary-backed colon actions should mark prompt padding before reset'
+    forge_test_assert_eq 'visible' "$_FORGE_OUTPUT_MODE" 'binary-backed colon actions should mark visible output before reset'
     or return 1
 end
 
@@ -435,8 +435,7 @@ end
 function test_reset_adds_single_separator_for_visible_output_handoff
     forge_test_reset
 
-    set -g _FORGE_POST_INTERACTIVE_NEWLINE 1
-    set -g _FORGE_POST_OUTPUT_PADDING 1
+    set -g _FORGE_OUTPUT_MODE visible
     set -l reset_capture "$FORGE_TEST_TMPDIR/reset-padding.bin"
 
     function commandline
@@ -478,12 +477,8 @@ if data != expected:
 
     set --erase __forge_reset_cleared __forge_reset_repaint
 
-    if set -q _FORGE_POST_INTERACTIVE_NEWLINE; and test -n "$_FORGE_POST_INTERACTIVE_NEWLINE"
-        forge_test_fail 'visible-output reset should clear the post-interactive newline flag'
-        return 1
-    end
-    if set -q _FORGE_POST_OUTPUT_PADDING; and test -n "$_FORGE_POST_OUTPUT_PADDING"
-        forge_test_fail 'visible-output reset should clear the post-output padding flag'
+    if set -q _FORGE_OUTPUT_MODE; and test -n "$_FORGE_OUTPUT_MODE"
+        forge_test_fail 'visible-output reset should clear the output mode flag'
         return 1
     end
 end
@@ -616,7 +611,7 @@ for test_name in \
     test_model_reset_dispatch_matches_zsh_config_reload_behavior \
     test_reasoning_effort_sets_session_override \
     test_config_reasoning_effort_calls_binary \
-    test_exec_marks_padding_for_following_reset \
+    test_exec_marks_output_mode_for_following_reset \
     test_accept_line_uses_execute_handoff_after_interactive_exec \
     test_deferred_exec_repairs_history_with_original_prompt \
     test_at_completion_wraps_selected_path \
