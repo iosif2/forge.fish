@@ -81,7 +81,36 @@ function test_accept_line_supports_colon_command_without_space
     end
 end
 
-function test_accept_line_treats_unknown_colon_word_as_prompt_text
+function test_accept_line_rejects_unknown_colon_command_without_space
+    forge_test_reset
+
+    set -l probe_output (fish -ic '
+        source tests/fixtures/extension.fish
+        forge_test_bootstrap
+        forge_test_reset
+        commandline -r ":hi"
+        set -l accept_output (_forge_accept_line 2>&1 | string collect)
+        set -l normalized_output (string replace -ra "\\e\\[[0-9;?]*[ -/]*[@-~]" "" -- "$accept_output")
+        set -l pending ""
+        if set -q _FORGE_PENDING_EXEC
+            set pending "$_FORGE_PENDING_EXEC"
+        end
+        printf "PENDING:%s\nOUT-BEGIN\n%s\nOUT-END\nBUFFER:%s\n" "$pending" "$normalized_output" (commandline)
+    ' 2>/dev/null | string collect)
+
+    forge_test_assert_contains 'PENDING:' "$probe_output" 'unknown colon commands should report pending state'
+    or return 1
+    if string match -q '*PENDING:1*' -- "$probe_output"
+        forge_test_fail 'unknown colon commands without a space should not queue deferred execution'
+        return 1
+    end
+    forge_test_assert_contains "Command 'hi'" "$probe_output" 'unknown colon commands without a space should stay on the command path'
+    or return 1
+    forge_test_assert_contains 'not found' "$probe_output" 'unknown colon commands without a space should report a missing command'
+    or return 1
+end
+
+function test_accept_line_treats_space_prefixed_colon_text_as_prompt_text
     forge_test_reset
 
     set -l probe_output (fish -ic '
@@ -89,18 +118,18 @@ function test_accept_line_treats_unknown_colon_word_as_prompt_text
         forge_test_bootstrap
         forge_test_reset
         set -g _FORGE_CONVERSATION_ID cid-stub-001
-        commandline -r ":hello world"
+        commandline -r ": hi"
         _forge_accept_line >/dev/null 2>/dev/null
         printf "PENDING:%s\nARGV:%s\nHISTORY:%s\nBUFFER:%s\n" "$_FORGE_PENDING_EXEC" (string escape --style=script -- (string join "|" -- $_FORGE_PENDING_EXEC_ARGV)) (string escape --style=script -- "$_FORGE_DEFERRED_EXEC_HISTORY") (string escape --style=script -- (commandline))
     ' 2>/dev/null | string collect)
 
-    forge_test_assert_contains 'PENDING:1' "$probe_output" 'unknown colon words should queue deferred execution'
+    forge_test_assert_contains 'PENDING:1' "$probe_output" 'space-prefixed colon text should queue deferred execution'
     or return 1
-    forge_test_assert_contains "ARGV:'-p|hello world|--cid|cid-stub-001'" "$probe_output" 'unknown colon words should become plain prompt text argv'
+    forge_test_assert_contains "ARGV:'-p|hi|--cid|cid-stub-001'" "$probe_output" 'space-prefixed colon text should become plain prompt text argv'
     or return 1
-    forge_test_assert_contains "HISTORY:':hello world'" "$probe_output" 'unknown colon words should preserve the raw colon buffer for history repair'
+    forge_test_assert_contains "HISTORY:': hi'" "$probe_output" 'space-prefixed colon text should preserve the raw colon buffer for history repair'
     or return 1
-    forge_test_assert_contains 'BUFFER::' "$probe_output" 'unknown colon words should hand off through the public colon wrapper'
+    forge_test_assert_contains 'BUFFER::' "$probe_output" 'space-prefixed colon text should hand off through the public colon wrapper'
     or return 1
 end
 
@@ -545,7 +574,8 @@ for test_name in \
     test_conversation_helpers_are_available_after_bootstrap \
     test_colon_completion_uses_native_completions \
     test_accept_line_supports_colon_command_without_space \
-    test_accept_line_treats_unknown_colon_word_as_prompt_text \
+    test_accept_line_rejects_unknown_colon_command_without_space \
+    test_accept_line_treats_space_prefixed_colon_text_as_prompt_text \
     test_accept_line_preserves_punctuation_prompt_text \
     test_commit_matches_zsh_and_clears_commandline \
     test_config_reload_clears_all_session_overrides \
