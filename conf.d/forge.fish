@@ -1,18 +1,15 @@
-# Configuration and initialization for forge fish plugin
-# Auto-sourced by fish shell from conf.d/
-# Equivalent of shell-plugin/lib/config.zsh + shell-plugin/lib/bindings.zsh
-
-# Ensure grouped helper functions that are not autoload-safe by filename are
-# available in every session, even during install/update reloads.
-set -l __forge_plugin_root (path dirname (path dirname (status filename)))
-if test -f "$__forge_plugin_root/functions/_forge_action_conversation_helpers.fish"
-    source "$__forge_plugin_root/functions/_forge_action_conversation_helpers.fish"
+function __forge_source_helpers --description 'Source helper files that cannot rely on filename-based autoload'
+    set -l plugin_root (path dirname (path dirname (status filename)))
+    set -l helpers_file "$plugin_root/functions/_forge_conversation_helpers.fish"
+    if test -f "$helpers_file"
+        source "$helpers_file"
+    end
 end
-set --erase __forge_plugin_root
 
-# If this file is sourced again in the same shell (for example after Fisher
-# install/update), remove the old in-memory state first so the new definitions
-# can replace it cleanly.
+__forge_source_helpers
+functions --erase __forge_source_helpers
+
+# Re-sourcing during install/update should replace the old in-memory plugin state first.
 if set -q _FORGE_PLUGIN_LOADED
     if functions -q _forge_uninstall
         _forge_uninstall
@@ -167,15 +164,7 @@ function __forge_refresh_prompt_cache --description 'Refresh the cached zsh rpro
 end
 
 function __forge_erase_execute_blank --on-event fish_prompt --description 'Erase the blank line Fish emits before the prompt when execute fires'
-    # commandline -f execute always outputs a newline before drawing the next
-    # prompt. For output-producing :commands we set _FORGE_SKIP_BLANK_LINE=1 so
-    # that this handler can erase that line.
-    #
-    # fish_prompt event fires once per actual prompt render — unlike
-    # __forge_maybe_refresh_prompt_cache which is also called directly by
-    # __forge_status_prompt during intermediate rprompt renders. Using a
-    # dedicated handler here ensures the flag is consumed exactly once, at the
-    # correct time: as the new prompt is about to be drawn.
+    # execute prints one extra blank line before the prompt; consume it once here.
     if test "$_FORGE_SKIP_BLANK_LINE" = 1
         set --erase _FORGE_SKIP_BLANK_LINE
         printf '\033[1A\033[2K'
@@ -218,8 +207,9 @@ function __forge_title_command --argument current_command --description 'Return 
 end
 
 function : --description 'Run Forge default : prompt through normal Fish command execution'
+    # The keybinding path rewrites ":" into a real command so Fish redraw/history match normal command execution.
     if test "$_FORGE_PENDING_EXEC" = 1
-        _forge_deferred_exec
+        _forge_run_deferred
         return $status
     end
 
@@ -227,9 +217,9 @@ function : --description 'Run Forge default : prompt through normal Fish command
         return 0
     end
 
-    _forge_action_default '' (string join ' ' -- $argv)
+    _forge_dispatch_default '' (string join ' ' -- $argv)
     if test "$_FORGE_PENDING_EXEC" = 1
-        _forge_deferred_exec
+        _forge_run_deferred
         return $status
     end
 
@@ -400,8 +390,8 @@ function _forge_uninstall_restore_bindings --description 'Restore Fish bindings 
 end
 
 function _forge_install_colon_completions --description 'Refresh synthetic :command functions used by Fish native completion'
-    if functions -q _forge_refresh_colon_command_functions
-        _forge_refresh_colon_command_functions
+    if functions -q _forge_refresh_colons
+        _forge_refresh_colons
     end
 end
 
@@ -410,14 +400,14 @@ function _forge_install_bindings --description 'Install Forge key bindings for t
         return 0
     end
 
-    bind --mode default \r _forge_accept_line
-    bind --mode default \n _forge_accept_line
-    bind --mode default \t _forge_completion
+    bind --mode default \r _forge_accept
+    bind --mode default \n _forge_accept
+    bind --mode default \t _forge_complete
 
     if contains -- insert (bind --list-modes 2>/dev/null)
-        bind --mode insert \r _forge_accept_line
-        bind --mode insert \n _forge_accept_line
-        bind --mode insert \t _forge_completion
+        bind --mode insert \r _forge_accept
+        bind --mode insert \n _forge_accept
+        bind --mode insert \t _forge_complete
     end
 end
 
@@ -478,7 +468,6 @@ function _forge_uninstall --on-event forge_uninstall --description 'Clean up For
     functions --erase (functions -a | string match --entire --regex '^_forge_.*$') 2>/dev/null
 end
 
-# --- Configuration variables ---
 if set -q FORGE_BIN; and test -n "$FORGE_BIN"
     set -g _FORGE_BIN "$FORGE_BIN"
 else if command -q forge
@@ -517,6 +506,7 @@ set -g _FORGE_RPROMPT_ZSH_CACHE ''
 set -g _FORGE_RPROMPT_SIGNATURE ''
 set -g _FORGE_RPROMPT_CACHE_READY 0
 set -g _FORGE_RPROMPT_DIRTY 1
+set -g _FORGE_OUTPUT_MODE ''
 set -g _FORGE_CONVERSATION_ID ''
 set -g _FORGE_ACTIVE_AGENT ''
 set -g _FORGE_PENDING_EXEC 0

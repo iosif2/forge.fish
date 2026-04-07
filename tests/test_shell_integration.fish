@@ -10,7 +10,7 @@ set -l ok_text (forge_test_fixture_text ok.txt)
 function test_doctor_wrapper
     forge_test_reset
 
-    set -l output (_forge_action_doctor | string collect)
+    set -l output (_forge_command_doctor | string collect)
     forge_test_assert_contains 'Forge Fish Doctor' "$output" 'doctor should print the shell-native doctor header'
     or return 1
     forge_test_assert_contains 'Summary' "$output" 'doctor should print the final summary section'
@@ -25,10 +25,98 @@ end
 function test_keyboard_wrapper
     forge_test_reset
 
-    set -l output (_forge_action_keyboard | string collect)
+    set -l output (_forge_command_keyboard | string collect)
     forge_test_assert_contains "$ok_text" "$output" 'keyboard should return the happy-path fixture output'
     or return 1
     forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["fish", "keyboard"]' 'keyboard should call fish keyboard directly'
+    or return 1
+end
+
+function test_agent_command_accepts_explicit_agent_id
+    forge_test_reset
+
+    _forge_command_agent sage >/dev/null
+
+    forge_test_assert_eq 'sage' "$_FORGE_ACTIVE_AGENT" 'agent command should activate an explicit agent id'
+    or return 1
+    forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["list", "agents", "--porcelain"]' 'agent command should validate explicit agent ids against the agent list'
+    or return 1
+end
+
+function test_agent_command_uses_picker_selection
+    forge_test_reset
+    set -g _FORGE_ACTIVE_AGENT 'muse'
+
+    function _forge_fzf
+        printf 'sage    SAGE    builtin    yes    text    Strategic reasoning agent\n'
+    end
+
+    _forge_command_agent >/dev/null
+    functions --erase _forge_fzf
+
+    forge_test_assert_eq 'sage' "$_FORGE_ACTIVE_AGENT" 'agent command should activate the picked agent'
+    or return 1
+    forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["list", "agents", "--porcelain"]' 'agent picker should source candidates from the agent list'
+    or return 1
+end
+
+function test_agent_command_rejects_unknown_agent_id
+    forge_test_reset
+
+    set -l output (_forge_command_agent unknown | string collect)
+    set -l normalized_output (string replace -ra "\\e\\[[0-9;?]*[ -/]*[@-~]" "" -- "$output")
+
+    forge_test_assert_contains "Agent 'unknown'" "$normalized_output" 'agent command should report unknown explicit agent ids'
+    or return 1
+    forge_test_assert_eq '' "$_FORGE_ACTIVE_AGENT" 'agent command should leave the active agent unchanged on validation failure'
+    or return 1
+end
+
+function test_clone_command_accepts_explicit_conversation_id
+    forge_test_reset
+    set -g _FORGE_CONVERSATION_ID 'cid-current'
+    set -gx FORGE_STUB_CLONE_OUTPUT 'Cloned cid-alpha to 22222222-2222-2222-2222-222222222222'
+
+    _forge_command_clone cid-alpha >/dev/null
+
+    forge_test_assert_eq '22222222-2222-2222-2222-222222222222' "$_FORGE_CONVERSATION_ID" 'clone command should switch to the cloned conversation id'
+    or return 1
+    forge_test_assert_eq 'cid-current' "$_FORGE_PREVIOUS_CONVERSATION_ID" 'clone command should preserve the previous conversation when switching'
+    or return 1
+    forge_test_assert_log_python 'len(entries) == 3 and entries[0]["argv"] == ["conversation", "clone", "cid-alpha"] and entries[1]["argv"] == ["conversation", "show", "22222222-2222-2222-2222-222222222222"] and entries[2]["argv"] == ["conversation", "info", "22222222-2222-2222-2222-222222222222"]' 'clone command should clone the target and show the new conversation details'
+    or return 1
+end
+
+function test_clone_command_uses_picker_selection
+    forge_test_reset
+    set -g _FORGE_CONVERSATION_ID 'cid-beta'
+    set -gx FORGE_STUB_CLONE_OUTPUT 'Cloned cid-alpha to 33333333-3333-3333-3333-333333333333'
+
+    function _forge_fzf
+        printf 'cid-alpha    Alpha thread    2026-04-08\n'
+    end
+
+    _forge_command_clone >/dev/null
+    functions --erase _forge_fzf
+
+    forge_test_assert_eq '33333333-3333-3333-3333-333333333333' "$_FORGE_CONVERSATION_ID" 'clone picker should switch to the cloned conversation id'
+    or return 1
+    forge_test_assert_log_python 'len(entries) == 4 and entries[0]["argv"] == ["conversation", "list", "--porcelain"] and entries[1]["argv"] == ["conversation", "clone", "cid-alpha"] and entries[2]["argv"] == ["conversation", "show", "33333333-3333-3333-3333-333333333333"] and entries[3]["argv"] == ["conversation", "info", "33333333-3333-3333-3333-333333333333"]' 'clone picker should source candidates from conversation list before cloning the selection'
+    or return 1
+end
+
+function test_clone_command_reports_empty_list
+    forge_test_reset
+
+    function _forge_command_clone_list
+        return 0
+    end
+
+    set -l output (_forge_command_clone | string collect)
+    set -l normalized_output (string replace -ra "\\e\\[[0-9;?]*[ -/]*[@-~]" "" -- "$output")
+    functions --erase _forge_command_clone_list
+
+    forge_test_assert_contains 'No conversations found' "$normalized_output" 'clone command should report when there are no conversations to pick from'
     or return 1
 end
 
@@ -36,20 +124,50 @@ function test_conversation_helpers_are_available_after_bootstrap
     forge_test_reset
     set -g _FORGE_CONVERSATION_ID 'cid-old'
 
-    _forge_clear_conversation
+    _forge_conversation_clear
     forge_test_assert_eq 'cid-old' "$_FORGE_PREVIOUS_CONVERSATION_ID" 'clear helper should be available and save the previous conversation'
     or return 1
     forge_test_assert_eq '' "$_FORGE_CONVERSATION_ID" 'clear helper should be available and clear the active conversation'
     or return 1
 
-    _forge_switch_conversation 'cid-new'
+    _forge_conversation_switch 'cid-new'
     forge_test_assert_eq 'cid-new' "$_FORGE_CONVERSATION_ID" 'switch helper should be available and set the active conversation'
+    or return 1
+end
+
+function test_conversation_helpers_are_available_when_conf_is_sourced_directly
+    set -l probe_output (fish -ic '
+        set -l repo_root (path resolve .)
+        if not contains -- "$repo_root/functions" $fish_function_path
+            set -gx fish_function_path "$repo_root/functions" $fish_function_path
+        end
+        set -gx FORGE_BIN "$repo_root/tests/bin/forge-stub"
+        if set -q _FORGE_PLUGIN_LOADED
+            if functions -q _forge_uninstall
+                _forge_uninstall
+            else
+                for var in (set --names | string match --entire --regex "^_FORGE_.*")
+                    set --erase $var
+                end
+            end
+        end
+        source "$repo_root/conf.d/forge.fish"
+        set -g _FORGE_BIN "$FORGE_BIN"
+        set -g _FORGE_CONVERSATION_ID cid-old
+        _forge_conversation_clear
+        _forge_conversation_switch cid-new
+        printf "CID:%s PREV:%s\n" "$_FORGE_CONVERSATION_ID" "$_FORGE_PREVIOUS_CONVERSATION_ID"
+    ' 2>/dev/null | string collect)
+
+    forge_test_assert_contains 'CID:cid-new' "$probe_output" 'conversation helpers should still be available when conf.d is sourced directly'
+    or return 1
+    forge_test_assert_contains 'PREV:cid-old' "$probe_output" 'directly sourced conf.d should preserve the previous conversation state via the helper bundle'
     or return 1
 end
 
 function test_colon_completion_uses_native_completions
     forge_test_reset
-    _forge_refresh_colon_command_functions
+    _forge_refresh_colons
 
     set -l candidates (complete -C ':n' | string collect)
     forge_test_assert_contains ':new' "$candidates" 'colon completion should offer the no-space :new command'
@@ -67,7 +185,7 @@ function test_accept_line_supports_colon_command_without_space
         forge_test_reset
         set -g _FORGE_CONVERSATION_ID cid-old
         commandline -r ":new"
-        _forge_accept_line >/dev/null 2>/dev/null
+        _forge_accept >/dev/null 2>/dev/null
         printf "CID:%s PREV:%s\n" "$_FORGE_CONVERSATION_ID" "$_FORGE_PREVIOUS_CONVERSATION_ID"
     ' 2>/dev/null | string collect)
 
@@ -89,7 +207,7 @@ function test_accept_line_rejects_unknown_colon_command_without_space
         forge_test_bootstrap
         forge_test_reset
         commandline -r ":hi"
-        set -l accept_output (_forge_accept_line 2>&1 | string collect)
+        set -l accept_output (_forge_accept 2>&1 | string collect)
         set -l normalized_output (string replace -ra "\\e\\[[0-9;?]*[ -/]*[@-~]" "" -- "$accept_output")
         set -l pending ""
         if set -q _FORGE_PENDING_EXEC
@@ -119,7 +237,7 @@ function test_accept_line_treats_space_prefixed_colon_text_as_prompt_text
         forge_test_reset
         set -g _FORGE_CONVERSATION_ID cid-stub-001
         commandline -r ": hi"
-        _forge_accept_line >/dev/null 2>/dev/null
+        _forge_accept >/dev/null 2>/dev/null
         printf "PENDING:%s\nARGV:%s\nHISTORY:%s\nBUFFER:%s\n" "$_FORGE_PENDING_EXEC" (string escape --style=script -- (string join "|" -- $_FORGE_PENDING_EXEC_ARGV)) (string escape --style=script -- "$_FORGE_DEFERRED_EXEC_HISTORY") (string escape --style=script -- (commandline))
     ' 2>/dev/null | string collect)
 
@@ -142,7 +260,7 @@ function test_accept_line_preserves_punctuation_prompt_text
         forge_test_reset
         set -g _FORGE_CONVERSATION_ID cid-stub-001
         commandline -r ": (hello) [world]"
-        _forge_accept_line >/dev/null 2>/dev/null
+        _forge_accept >/dev/null 2>/dev/null
         printf "PENDING:%s\nARGV:%s\nHISTORY:%s\nBUFFER:%s\n" "$_FORGE_PENDING_EXEC" (string join "|" -- $_FORGE_PENDING_EXEC_ARGV | string collect | string escape --style=script --) (string escape --style=script -- "$_FORGE_DEFERRED_EXEC_HISTORY") (commandline | string collect | string escape --style=script --)
     ' 2>/dev/null | string collect)
 
@@ -167,7 +285,7 @@ function test_commit_matches_zsh_and_clears_commandline
         set -gx FORGE_STUB_COMMIT_MESSAGE "feat: add tests"
         commandline -r ":commit"
         commandline -C 7
-        _forge_accept_line
+        _forge_accept
         printf "BUFFER:%s\n" (commandline)
     ' 2>/dev/null | string collect)
 
@@ -187,7 +305,7 @@ function test_config_reload_clears_all_session_overrides
     set -g _FORGE_SESSION_PROVIDER 'openai'
     set -g _FORGE_SESSION_REASONING_EFFORT 'high'
 
-    _forge_action_config_reload >/dev/null
+    _forge_command_config_reload >/dev/null
 
     forge_test_assert_eq '' "$_FORGE_SESSION_MODEL" 'config-reload should clear the session model override'
     or return 1
@@ -197,19 +315,22 @@ function test_config_reload_clears_all_session_overrides
     or return 1
 end
 
-function test_model_reset_matches_zsh_config_reload_behavior
-    forge_test_reset
-    set -g _FORGE_SESSION_MODEL 'gpt-5'
-    set -g _FORGE_SESSION_PROVIDER 'openai'
-    set -g _FORGE_SESSION_REASONING_EFFORT 'medium'
+function test_model_reset_dispatch_matches_zsh_config_reload_behavior
+    set -l probe_output (fish -ic '
+        source tests/fixtures/extension.fish
+        forge_test_bootstrap
+        forge_test_reset
+        set -g _FORGE_SESSION_MODEL gpt-5
+        set -g _FORGE_SESSION_PROVIDER openai
+        set -g _FORGE_SESSION_REASONING_EFFORT medium
+        commandline -r ":model-reset"
+        _forge_accept >/dev/null 2>/dev/null
+        printf "MODEL:%s PROVIDER:%s EFFORT:%s\n" "$_FORGE_SESSION_MODEL" "$_FORGE_SESSION_PROVIDER" "$_FORGE_SESSION_REASONING_EFFORT"
+    ' 2>/dev/null | string collect)
 
-    _forge_action_model_reset >/dev/null
-
-    forge_test_assert_eq '' "$_FORGE_SESSION_MODEL" 'model-reset should clear the session model override'
+    forge_test_assert_contains 'MODEL:' "$probe_output" 'model-reset dispatch should report the cleared session state'
     or return 1
-    forge_test_assert_eq '' "$_FORGE_SESSION_PROVIDER" 'model-reset should clear the session provider override'
-    or return 1
-    forge_test_assert_eq '' "$_FORGE_SESSION_REASONING_EFFORT" 'model-reset should clear the session reasoning override'
+    forge_test_assert_contains 'MODEL: PROVIDER: EFFORT:' "$probe_output" 'model-reset should clear all session overrides through the accept-line dispatch path'
     or return 1
 end
 
@@ -221,7 +342,7 @@ function test_reasoning_effort_sets_session_override
         printf 'medium'
     end
 
-    _forge_action_reasoning_effort >/dev/null
+    _forge_command_reasoning_effort >/dev/null
     functions --erase _forge_fzf
 
     forge_test_assert_eq 'medium' "$_FORGE_SESSION_REASONING_EFFORT" 'reasoning-effort should update the session override from the picker selection'
@@ -236,7 +357,7 @@ function test_config_reasoning_effort_calls_binary
         printf 'high'
     end
 
-    _forge_action_config_reasoning_effort >/dev/null
+    _forge_command_config_reasoning_effort >/dev/null
     functions --erase _forge_fzf
 
     forge_test_assert_log_python 'len(entries) == 2 and entries[0]["argv"] == ["config", "get", "reasoning-effort"] and entries[1]["argv"] == ["config", "set", "reasoning-effort", "high"]' 'config-reasoning-effort should read the current value and persist the new selection through the forge binary'
@@ -251,11 +372,11 @@ function test_accept_line_uses_execute_handoff_after_interactive_exec
         forge_test_bootstrap
         forge_test_reset
         set -g _FORGE_CONVERSATION_ID cid-stub-001
-        function _forge_exec_interactive
-            set -g _FORGE_POST_OUTPUT_PADDING 1
+        function _forge_run_interactive
+            set -g _FORGE_OUTPUT_MODE visible
             set -g _FORGE_RPROMPT_DIRTY 1
         end
-        function _forge_reset
+        function _forge_reader_reset
             set -g __forge_reset_called 1
         end
         function commandline
@@ -275,7 +396,7 @@ function test_accept_line_uses_execute_handoff_after_interactive_exec
         end
         commandline -r ": hi"
         commandline -C 4
-        _forge_accept_line >/dev/null 2>/dev/null
+        _forge_accept >/dev/null 2>/dev/null
         printf "RESET:%s EXEC:%s BLANK:%s BUFFER:%s\n" \
             (set -q __forge_reset_called; and echo yes; or echo no) \
             "$__forge_commandline_function" \
@@ -293,12 +414,12 @@ function test_accept_line_uses_execute_handoff_after_interactive_exec
     or return 1
 end
 
-function test_exec_marks_padding_for_following_reset
+function test_exec_marks_output_mode_for_following_reset
     forge_test_reset
 
-    _forge_exec fish keyboard >/dev/null
+    _forge_run fish keyboard >/dev/null
 
-    forge_test_assert_eq '1' "$_FORGE_POST_OUTPUT_PADDING" 'binary-backed colon actions should mark prompt padding before reset'
+    forge_test_assert_eq 'visible' "$_FORGE_OUTPUT_MODE" 'binary-backed colon actions should mark visible output before reset'
     or return 1
 end
 
@@ -344,7 +465,7 @@ exit
     set -l history_output (string collect < "$history_file")
     forge_test_assert_contains '- cmd: : hello world' "$history_output" 'deferred : prompt execution should preserve the original prompt in fish history'
     or return 1
-    if string match -q '*_forge_deferred_exec*' -- "$history_output"
+    if string match -q '*_forge_run_deferred*' -- "$history_output"
         forge_test_fail 'deferred : prompt execution should not leave the helper command in fish history'
         return 1
     end
@@ -357,7 +478,7 @@ exit
     set -l transcript_output (string collect < "$transcript_file")
     forge_test_assert_contains ': hello world' "$transcript_output" 'deferred : prompt execution should keep the original prompt visible in the terminal transcript'
     or return 1
-    if string match -q '*_forge_deferred_exec*' -- "$transcript_output"
+    if string match -q '*_forge_run_deferred*' -- "$transcript_output"
         forge_test_fail 'deferred : prompt execution should not expose the helper name in the terminal transcript'
         return 1
     end
@@ -380,7 +501,7 @@ function test_at_completion_wraps_selected_path
         end
         commandline -r "@"
         commandline -C 1
-        _forge_completion
+        _forge_complete
         printf "BUFFER:%s\n" (commandline)
     ' 2>/dev/null | string collect)
 
@@ -402,8 +523,7 @@ end
 function test_reset_adds_single_separator_for_visible_output_handoff
     forge_test_reset
 
-    set -g _FORGE_POST_INTERACTIVE_NEWLINE 1
-    set -g _FORGE_POST_OUTPUT_PADDING 1
+    set -g _FORGE_OUTPUT_MODE visible
     set -l reset_capture "$FORGE_TEST_TMPDIR/reset-padding.bin"
 
     function commandline
@@ -417,7 +537,7 @@ function test_reset_adds_single_separator_for_visible_output_handoff
     end
 
     begin
-        _forge_reset
+        _forge_reader_reset
     end >"$reset_capture"
 
     functions --erase commandline
@@ -445,12 +565,8 @@ if data != expected:
 
     set --erase __forge_reset_cleared __forge_reset_repaint
 
-    if set -q _FORGE_POST_INTERACTIVE_NEWLINE; and test -n "$_FORGE_POST_INTERACTIVE_NEWLINE"
-        forge_test_fail 'visible-output reset should clear the post-interactive newline flag'
-        return 1
-    end
-    if set -q _FORGE_POST_OUTPUT_PADDING; and test -n "$_FORGE_POST_OUTPUT_PADDING"
-        forge_test_fail 'visible-output reset should clear the post-output padding flag'
+    if set -q _FORGE_OUTPUT_MODE; and test -n "$_FORGE_OUTPUT_MODE"
+        forge_test_fail 'visible-output reset should clear the output mode flag'
         return 1
     end
 end
@@ -460,7 +576,7 @@ function test_rprompt_falls_back_to_default_model_without_session_override
     set -g _FORGE_ACTIVE_AGENT 'forge'
     set -gx FORGE_STUB_DEFAULT_MODEL 'gpt-5-default'
 
-    set -l output (_forge_prompt_info | string collect)
+    set -l output (forge_test_prompt_info | string collect)
     forge_test_assert_contains 'gpt-5-default' "$output" 'rprompt should show the default model when no session override is set'
     or return 1
     forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["zsh", "rprompt"]' 'rprompt should query zsh rprompt once while using the default model'
@@ -473,8 +589,8 @@ function test_rprompt_uses_cached_zsh_output
     set -g _FORGE_SESSION_MODEL 'gpt-5'
     set -gx FORGE_STUB_RPROMPT_RAW ' %B%F{15}SAGE%f%b %B%F{15}1.5k%f%b %B%F{2}$0.01%f%b %F{134}gpt-5%f'
 
-    set -l first_output (_forge_prompt_info | string collect)
-    set -l second_output (_forge_prompt_info | string collect)
+    set -l first_output (forge_test_prompt_info | string collect)
+    set -l second_output (forge_test_prompt_info | string collect)
 
     forge_test_assert_contains 'SAGE' "$first_output" 'rprompt should include the parsed active agent label'
     or return 1
@@ -496,14 +612,14 @@ function test_rprompt_refreshes_immediately_after_command
     set -g _FORGE_SESSION_MODEL 'gpt-5'
     set -gx FORGE_STUB_RPROMPT_RAW ' %B%F{240}SAGE%f%b %F{240}gpt-5%f'
 
-    set -l initial_output (_forge_prompt_info | string collect)
+    set -l initial_output (forge_test_prompt_info | string collect)
     forge_test_assert_contains 'gpt-5' "$initial_output" 'initial prompt should include the model'
     or return 1
 
     set -gx FORGE_STUB_RPROMPT_RAW ' %B%F{15}SAGE%f%b %B%F{15}2.0k%f%b %F{134}gpt-5.1%f'
-    _forge_exec fish keyboard >/dev/null
+    _forge_run fish keyboard >/dev/null
 
-    set -l refreshed_output (_forge_prompt_info | string collect)
+    set -l refreshed_output (forge_test_prompt_info | string collect)
     forge_test_assert_contains '2.0k' "$refreshed_output" 'prompt should refresh token info immediately after command execution'
     or return 1
     forge_test_assert_contains 'gpt-5.1' "$refreshed_output" 'prompt should refresh model info immediately after command execution'
@@ -571,7 +687,14 @@ end
 for test_name in \
     test_doctor_wrapper \
     test_keyboard_wrapper \
+    test_agent_command_accepts_explicit_agent_id \
+    test_agent_command_uses_picker_selection \
+    test_agent_command_rejects_unknown_agent_id \
+    test_clone_command_accepts_explicit_conversation_id \
+    test_clone_command_uses_picker_selection \
+    test_clone_command_reports_empty_list \
     test_conversation_helpers_are_available_after_bootstrap \
+    test_conversation_helpers_are_available_when_conf_is_sourced_directly \
     test_colon_completion_uses_native_completions \
     test_accept_line_supports_colon_command_without_space \
     test_accept_line_rejects_unknown_colon_command_without_space \
@@ -579,10 +702,10 @@ for test_name in \
     test_accept_line_preserves_punctuation_prompt_text \
     test_commit_matches_zsh_and_clears_commandline \
     test_config_reload_clears_all_session_overrides \
-    test_model_reset_matches_zsh_config_reload_behavior \
+    test_model_reset_dispatch_matches_zsh_config_reload_behavior \
     test_reasoning_effort_sets_session_override \
     test_config_reasoning_effort_calls_binary \
-    test_exec_marks_padding_for_following_reset \
+    test_exec_marks_output_mode_for_following_reset \
     test_accept_line_uses_execute_handoff_after_interactive_exec \
     test_deferred_exec_repairs_history_with_original_prompt \
     test_at_completion_wraps_selected_path \

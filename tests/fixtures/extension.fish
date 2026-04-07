@@ -27,6 +27,15 @@ function forge_test_bootstrap
     end
 end
 
+function forge_test_exit_if_failed
+    if test $argv[1] -eq 0
+        return 0
+    end
+
+    forge_test_cleanup
+    exit 1
+end
+
 function forge_test_setup_tmpdir
     set -gx FORGE_TEST_TMPDIR (mktemp -d)
     set -gx FORGE_STUB_LOG_PATH "$FORGE_TEST_TMPDIR/calls.jsonl"
@@ -55,11 +64,10 @@ function forge_test_reset
     set -g _FORGE_RPROMPT_SIGNATURE ""
     set -g _FORGE_RPROMPT_CACHE_READY 0
     set -g _FORGE_RPROMPT_DIRTY 1
+    set -g _FORGE_OUTPUT_MODE ""
     set -g _FORGE_THEME_LOADED ""
     set -g _FORGE_ORIG_RIGHT_PROMPT_DEF ""
     set -g _FORGE_ORIG_TITLE_DEF ""
-    set -g _FORGE_POST_OUTPUT_PADDING ""
-    set -g _FORGE_POST_INTERACTIVE_NEWLINE ""
     set -g _FORGE_DEFERRED_EXEC_HISTORY ""
     set -g _FORGE_DEFERRED_EXEC_ERASE_WRAPPER ""
     set -g _FORGE_DEFERRED_EXEC_WRAPPER_COMMAND ""
@@ -83,6 +91,12 @@ end
 
 function forge_test_fixture_text --argument file_name
     string collect < "$FORGE_TEST_FIXTURES_DIR/$file_name"
+end
+
+function forge_test_prompt_info
+    if functions -q __forge_status_prompt
+        __forge_status_prompt
+    end
 end
 
 function forge_test_fail --argument message
