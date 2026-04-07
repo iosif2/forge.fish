@@ -32,17 +32,11 @@ function _forge_exec_interactive
     $cmd $argv </dev/tty >/dev/tty 2>/dev/tty
     set -l cmd_status $status
 
-    # Forge may leave the cursor at the end of its final status line without a
-    # trailing newline. Move to the next line so the Fish prompt does not
-    # overwrite Forge's final output.
-    if status is-interactive; and test -w /dev/tty
-        command printf '\r\n' >/dev/tty 2>/dev/null
-    end
-
-    # Fish already redraws the prompt when the keybinding handler returns. For
-    # interactive Forge sessions, forcing an extra _forge_reset pass can erase
-    # the final "Finished ..." line.
-    set -g _FORGE_SKIP_RESET 1
+    # Interactive Forge output leaves the cursor at the correct terminal
+    # position. Mark that visible output occurred so _forge_accept_line can hand
+    # the next prompt draw back to Fish through execute, which redraws the prompt
+    # immediately without leaving a blank reader line behind.
+    set -g _FORGE_POST_OUTPUT_PADDING 1
     set -g _FORGE_RPROMPT_DIRTY 1
     return $cmd_status
 end

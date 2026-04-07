@@ -214,7 +214,7 @@ function test_config_reasoning_effort_calls_binary
     or return 1
 end
 
-function test_accept_line_skips_reset_after_interactive_exec
+function test_accept_line_uses_execute_handoff_after_interactive_exec
     forge_test_reset
 
     set -l probe_output (fish -ic '
@@ -223,23 +223,44 @@ function test_accept_line_skips_reset_after_interactive_exec
         forge_test_reset
         set -g _FORGE_CONVERSATION_ID cid-stub-001
         function _forge_exec_interactive
-            set -g _FORGE_SKIP_RESET 1
+            set -g _FORGE_POST_OUTPUT_PADDING 1
             set -g _FORGE_RPROMPT_DIRTY 1
         end
         function _forge_reset
             set -g __forge_reset_called 1
         end
+        function commandline
+            switch "$argv[1]"
+                case -r
+                    set -g __forge_commandline_replace "$argv[2]"
+                    builtin commandline $argv
+                    return $status
+                case -f
+                    set -g __forge_commandline_function "$argv[2]"
+                    builtin commandline $argv
+                    return $status
+                case "*"
+                    builtin commandline $argv
+                    return $status
+            end
+        end
         commandline -r ": hi"
         commandline -C 4
         _forge_accept_line >/dev/null 2>/dev/null
-        printf "RESET:%s BUFFER:%s SKIP:%s\n" (set -q __forge_reset_called; and echo yes; or echo no) (commandline) (set -q _FORGE_SKIP_RESET; and echo yes; or echo no)
+        printf "RESET:%s EXEC:%s BLANK:%s BUFFER:%s\n" \
+            (set -q __forge_reset_called; and echo yes; or echo no) \
+            "$__forge_commandline_function" \
+            "$_FORGE_SKIP_BLANK_LINE" \
+            "$__forge_commandline_replace"
     ' 2>/dev/null | string collect)
 
-    forge_test_assert_contains 'RESET:no' "$probe_output" 'interactive : prompt dispatch should skip the normal reset path'
+    forge_test_assert_contains 'RESET:no' "$probe_output" 'interactive : prompt dispatch should bypass the normal reset path when visible output is tracked'
     or return 1
-    forge_test_assert_contains 'BUFFER:' "$probe_output" 'interactive : prompt dispatch should leave the commandline readable after returning'
+    forge_test_assert_contains 'EXEC:execute' "$probe_output" 'interactive : prompt dispatch should hand prompt redraw back through execute'
     or return 1
-    forge_test_assert_contains 'SKIP:no' "$probe_output" 'interactive : prompt dispatch should clear the skip-reset flag before returning'
+    forge_test_assert_contains 'BLANK:0' "$probe_output" 'interactive : prompt dispatch should let the blank-line erase hook consume the execute marker before control returns'
+    or return 1
+    forge_test_assert_contains 'BUFFER:' "$probe_output" 'interactive : prompt dispatch should clear the buffer before execute redraw'
     or return 1
 end
 
@@ -532,6 +553,7 @@ for test_name in \
     test_reasoning_effort_sets_session_override \
     test_config_reasoning_effort_calls_binary \
     test_exec_marks_padding_for_following_reset \
+    test_accept_line_uses_execute_handoff_after_interactive_exec \
     test_deferred_exec_repairs_history_with_original_prompt \
     test_at_completion_wraps_selected_path \
     test_fzf_wrappers_force_posix_shell_for_preview_commands \

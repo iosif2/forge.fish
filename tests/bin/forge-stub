@@ -175,7 +175,9 @@ def main() -> int:
             exit_code = 1
         else:
             stdout = f"workspace info ok path={argv[2]}"
-    elif argv == ["workspace", "sync", "--init"]:
+    elif len(argv) == 3 and argv[:2] == ["workspace", "init"]:
+        stdout = OK_TEXT
+    elif len(argv) == 4 and argv[:3] == ["workspace", "sync", "--init"]:
         stdout = OK_TEXT
     elif len(argv) == 3 and argv[:2] == ["workspace", "sync"]:
         stdout = f"workspace sync ok path={argv[2]}"
