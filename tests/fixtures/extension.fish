@@ -85,6 +85,12 @@ function forge_test_fixture_text --argument file_name
     string collect < "$FORGE_TEST_FIXTURES_DIR/$file_name"
 end
 
+function forge_test_prompt_info
+    if functions -q __forge_status_prompt
+        __forge_status_prompt
+    end
+end
+
 function forge_test_fail --argument message
     printf 'FAIL: %s\n' "$message" >&2
     return 1

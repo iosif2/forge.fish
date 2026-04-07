@@ -47,6 +47,36 @@ function test_conversation_helpers_are_available_after_bootstrap
     or return 1
 end
 
+function test_conversation_helpers_are_available_when_conf_is_sourced_directly
+    set -l probe_output (fish -ic '
+        set -l repo_root (path resolve .)
+        if not contains -- "$repo_root/functions" $fish_function_path
+            set -gx fish_function_path "$repo_root/functions" $fish_function_path
+        end
+        set -gx FORGE_BIN "$repo_root/tests/bin/forge-stub"
+        if set -q _FORGE_PLUGIN_LOADED
+            if functions -q _forge_uninstall
+                _forge_uninstall
+            else
+                for var in (set --names | string match --entire --regex "^_FORGE_.*")
+                    set --erase $var
+                end
+            end
+        end
+        source "$repo_root/conf.d/forge.fish"
+        set -g _FORGE_BIN "$FORGE_BIN"
+        set -g _FORGE_CONVERSATION_ID cid-old
+        _forge_clear_conversation
+        _forge_switch_conversation cid-new
+        printf "CID:%s PREV:%s\n" "$_FORGE_CONVERSATION_ID" "$_FORGE_PREVIOUS_CONVERSATION_ID"
+    ' 2>/dev/null | string collect)
+
+    forge_test_assert_contains 'CID:cid-new' "$probe_output" 'conversation helpers should still be available when conf.d is sourced directly'
+    or return 1
+    forge_test_assert_contains 'PREV:cid-old' "$probe_output" 'directly sourced conf.d should preserve the previous conversation state via the helper bundle'
+    or return 1
+end
+
 function test_colon_completion_uses_native_completions
     forge_test_reset
     _forge_refresh_colon_command_functions
@@ -197,19 +227,22 @@ function test_config_reload_clears_all_session_overrides
     or return 1
 end
 
-function test_model_reset_matches_zsh_config_reload_behavior
-    forge_test_reset
-    set -g _FORGE_SESSION_MODEL 'gpt-5'
-    set -g _FORGE_SESSION_PROVIDER 'openai'
-    set -g _FORGE_SESSION_REASONING_EFFORT 'medium'
+function test_model_reset_dispatch_matches_zsh_config_reload_behavior
+    set -l probe_output (fish -ic '
+        source tests/fixtures/extension.fish
+        forge_test_bootstrap
+        forge_test_reset
+        set -g _FORGE_SESSION_MODEL gpt-5
+        set -g _FORGE_SESSION_PROVIDER openai
+        set -g _FORGE_SESSION_REASONING_EFFORT medium
+        commandline -r ":model-reset"
+        _forge_accept_line >/dev/null 2>/dev/null
+        printf "MODEL:%s PROVIDER:%s EFFORT:%s\n" "$_FORGE_SESSION_MODEL" "$_FORGE_SESSION_PROVIDER" "$_FORGE_SESSION_REASONING_EFFORT"
+    ' 2>/dev/null | string collect)
 
-    _forge_action_model_reset >/dev/null
-
-    forge_test_assert_eq '' "$_FORGE_SESSION_MODEL" 'model-reset should clear the session model override'
+    forge_test_assert_contains 'MODEL:' "$probe_output" 'model-reset dispatch should report the cleared session state'
     or return 1
-    forge_test_assert_eq '' "$_FORGE_SESSION_PROVIDER" 'model-reset should clear the session provider override'
-    or return 1
-    forge_test_assert_eq '' "$_FORGE_SESSION_REASONING_EFFORT" 'model-reset should clear the session reasoning override'
+    forge_test_assert_contains 'MODEL: PROVIDER: EFFORT:' "$probe_output" 'model-reset should clear all session overrides through the accept-line dispatch path'
     or return 1
 end
 
@@ -460,7 +493,7 @@ function test_rprompt_falls_back_to_default_model_without_session_override
     set -g _FORGE_ACTIVE_AGENT 'forge'
     set -gx FORGE_STUB_DEFAULT_MODEL 'gpt-5-default'
 
-    set -l output (_forge_prompt_info | string collect)
+    set -l output (forge_test_prompt_info | string collect)
     forge_test_assert_contains 'gpt-5-default' "$output" 'rprompt should show the default model when no session override is set'
     or return 1
     forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["zsh", "rprompt"]' 'rprompt should query zsh rprompt once while using the default model'
@@ -473,8 +506,8 @@ function test_rprompt_uses_cached_zsh_output
     set -g _FORGE_SESSION_MODEL 'gpt-5'
     set -gx FORGE_STUB_RPROMPT_RAW ' %B%F{15}SAGE%f%b %B%F{15}1.5k%f%b %B%F{2}$0.01%f%b %F{134}gpt-5%f'
 
-    set -l first_output (_forge_prompt_info | string collect)
-    set -l second_output (_forge_prompt_info | string collect)
+    set -l first_output (forge_test_prompt_info | string collect)
+    set -l second_output (forge_test_prompt_info | string collect)
 
     forge_test_assert_contains 'SAGE' "$first_output" 'rprompt should include the parsed active agent label'
     or return 1
@@ -496,14 +529,14 @@ function test_rprompt_refreshes_immediately_after_command
     set -g _FORGE_SESSION_MODEL 'gpt-5'
     set -gx FORGE_STUB_RPROMPT_RAW ' %B%F{240}SAGE%f%b %F{240}gpt-5%f'
 
-    set -l initial_output (_forge_prompt_info | string collect)
+    set -l initial_output (forge_test_prompt_info | string collect)
     forge_test_assert_contains 'gpt-5' "$initial_output" 'initial prompt should include the model'
     or return 1
 
     set -gx FORGE_STUB_RPROMPT_RAW ' %B%F{15}SAGE%f%b %B%F{15}2.0k%f%b %F{134}gpt-5.1%f'
     _forge_exec fish keyboard >/dev/null
 
-    set -l refreshed_output (_forge_prompt_info | string collect)
+    set -l refreshed_output (forge_test_prompt_info | string collect)
     forge_test_assert_contains '2.0k' "$refreshed_output" 'prompt should refresh token info immediately after command execution'
     or return 1
     forge_test_assert_contains 'gpt-5.1' "$refreshed_output" 'prompt should refresh model info immediately after command execution'
@@ -572,6 +605,7 @@ for test_name in \
     test_doctor_wrapper \
     test_keyboard_wrapper \
     test_conversation_helpers_are_available_after_bootstrap \
+    test_conversation_helpers_are_available_when_conf_is_sourced_directly \
     test_colon_completion_uses_native_completions \
     test_accept_line_supports_colon_command_without_space \
     test_accept_line_rejects_unknown_colon_command_without_space \
@@ -579,7 +613,7 @@ for test_name in \
     test_accept_line_preserves_punctuation_prompt_text \
     test_commit_matches_zsh_and_clears_commandline \
     test_config_reload_clears_all_session_overrides \
-    test_model_reset_matches_zsh_config_reload_behavior \
+    test_model_reset_dispatch_matches_zsh_config_reload_behavior \
     test_reasoning_effort_sets_session_override \
     test_config_reasoning_effort_calls_binary \
     test_exec_marks_padding_for_following_reset \

@@ -44,65 +44,6 @@ function _forge_prepare_dispatch_lite --argument buffer
     commandline -C (string length -- "$buffer")
 end
 
-function _forge_is_builtin_colon_command --argument user_action
-    switch $user_action
-        case ask plan \
-            new n \
-            info i \
-            env e \
-            dump d \
-            compact \
-            retry r \
-            agent a \
-            conversation c \
-            config-provider provider p \
-            config-model cm \
-            model m \
-            config-reload cr model-reset mr \
-            reasoning-effort re \
-            config-reasoning-effort cre \
-            config-commit-model ccm \
-            config-suggest-model csm \
-            tools t \
-            config \
-            config-edit ce \
-            skill \
-            edit ed \
-            commit \
-            commit-preview \
-            suggest s \
-            clone \
-            rename rn \
-            conversation-rename \
-            copy \
-            workspace-sync sync \
-            workspace-init sync-init \
-            workspace-status sync-status \
-            workspace-info sync-info \
-            provider-login login \
-            logout \
-            doctor \
-            keyboard-shortcuts kb
-            return 0
-    end
-
-    return 1
-end
-
-function _forge_is_dispatchable_colon_command --argument user_action
-    if _forge_is_builtin_colon_command "$user_action"
-        return 0
-    end
-
-    set -l commands_list (_forge_get_commands | string collect)
-    if test -z "$commands_list"
-        return 1
-    end
-
-    string match -rq -- '^'(string escape --style=regex -- "$user_action")'[[:space:]]' \
-        (string split \n -- "$commands_list")
-end
-
 function _forge_accept_line
     set -l buf (commandline)
 
