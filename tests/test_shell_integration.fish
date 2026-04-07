@@ -81,6 +81,52 @@ function test_accept_line_supports_colon_command_without_space
     end
 end
 
+function test_accept_line_treats_unknown_colon_word_as_prompt_text
+    forge_test_reset
+
+    set -l probe_output (fish -ic '
+        source tests/fixtures/extension.fish
+        forge_test_bootstrap
+        forge_test_reset
+        set -g _FORGE_CONVERSATION_ID cid-stub-001
+        commandline -r ":hello world"
+        _forge_accept_line >/dev/null 2>/dev/null
+        printf "PENDING:%s\nARGV:%s\nHISTORY:%s\nBUFFER:%s\n" "$_FORGE_PENDING_EXEC" (string escape --style=script -- (string join "|" -- $_FORGE_PENDING_EXEC_ARGV)) (string escape --style=script -- "$_FORGE_DEFERRED_EXEC_HISTORY") (string escape --style=script -- (commandline))
+    ' 2>/dev/null | string collect)
+
+    forge_test_assert_contains 'PENDING:1' "$probe_output" 'unknown colon words should queue deferred execution'
+    or return 1
+    forge_test_assert_contains "ARGV:'-p|hello world|--cid|cid-stub-001'" "$probe_output" 'unknown colon words should become plain prompt text argv'
+    or return 1
+    forge_test_assert_contains "HISTORY:':hello world'" "$probe_output" 'unknown colon words should preserve the raw colon buffer for history repair'
+    or return 1
+    forge_test_assert_contains 'BUFFER::' "$probe_output" 'unknown colon words should hand off through the public colon wrapper'
+    or return 1
+end
+
+function test_accept_line_preserves_punctuation_prompt_text
+    forge_test_reset
+
+    set -l probe_output (fish -ic '
+        source tests/fixtures/extension.fish
+        forge_test_bootstrap
+        forge_test_reset
+        set -g _FORGE_CONVERSATION_ID cid-stub-001
+        commandline -r ": (hello) [world]"
+        _forge_accept_line >/dev/null 2>/dev/null
+        printf "PENDING:%s\nARGV:%s\nHISTORY:%s\nBUFFER:%s\n" "$_FORGE_PENDING_EXEC" (string join "|" -- $_FORGE_PENDING_EXEC_ARGV | string collect | string escape --style=script --) (string escape --style=script -- "$_FORGE_DEFERRED_EXEC_HISTORY") (commandline | string collect | string escape --style=script --)
+    ' 2>/dev/null | string collect)
+
+    forge_test_assert_contains 'PENDING:1' "$probe_output" 'punctuation colon prompts should queue deferred execution'
+    or return 1
+    forge_test_assert_contains "ARGV:'-p|(hello) [world]|--cid|cid-stub-001'" "$probe_output" 'punctuation colon prompts should preserve punctuation in queued argv'
+    or return 1
+    forge_test_assert_contains "HISTORY:': (hello) [world]'" "$probe_output" 'punctuation colon prompts should preserve the raw buffer for history repair'
+    or return 1
+    forge_test_assert_contains 'BUFFER::' "$probe_output" 'punctuation colon prompts should hand off through the public colon wrapper'
+    or return 1
+end
+
 function test_commit_matches_zsh_and_clears_commandline
     forge_test_reset
     set -gx FORGE_STUB_COMMIT_MESSAGE 'feat: add tests'
@@ -203,6 +249,73 @@ function test_exec_marks_padding_for_following_reset
     _forge_exec fish keyboard >/dev/null
 
     forge_test_assert_eq '1' "$_FORGE_POST_OUTPUT_PADDING" 'binary-backed colon actions should mark prompt padding before reset'
+    or return 1
+end
+
+function test_deferred_exec_repairs_history_with_original_prompt
+    forge_test_reset
+
+    if not command -q script
+        return 0
+    end
+
+    set -l history_root "$FORGE_TEST_TMPDIR/pty-history"
+    set -l isolated_home "$FORGE_TEST_TMPDIR/pty-home"
+    set -l isolated_config "$FORGE_TEST_TMPDIR/pty-config"
+    set -l history_name forgehistorytest
+    set -l history_file "$history_root/fish/$history_name"_history
+    set -l stub_log "$FORGE_TEST_TMPDIR/pty-calls.jsonl"
+    set -l transcript_file "$FORGE_TEST_TMPDIR/pty-transcript.txt"
+    set -l fixture_path "$FORGE_TEST_REPO_ROOT/tests/fixtures/extension.fish"
+    mkdir -p "$history_root" "$isolated_home" "$isolated_config"
+
+    set -l session_input "set -gx FORGE_STUB_LOG_PATH \"$stub_log\"
+set -gx FORGE_SYNC_ENABLED false
+source \"$fixture_path\"
+forge_test_bootstrap
+forge_test_reset
+set -g _FORGE_CONVERSATION_ID cid-stub-001
+: hello world
+builtin history save
+exit
+"
+
+    printf '%s' "$session_input" | env HOME="$isolated_home" XDG_CONFIG_HOME="$isolated_config" XDG_DATA_HOME="$history_root" fish_history="$history_name" TERM=dumb script -qec 'fish -i' "$transcript_file" >/dev/null 2>&1
+    or begin
+        forge_test_fail 'pty history probe should complete successfully'
+        return 1
+    end
+
+    if not test -f "$history_file"
+        forge_test_fail 'pty history probe should create an isolated fish history file'
+        return 1
+    end
+
+    set -l history_output (string collect < "$history_file")
+    forge_test_assert_contains '- cmd: : hello world' "$history_output" 'deferred : prompt execution should preserve the original prompt in fish history'
+    or return 1
+    if string match -q '*_forge_deferred_exec*' -- "$history_output"
+        forge_test_fail 'deferred : prompt execution should not leave the helper command in fish history'
+        return 1
+    end
+
+    if not test -f "$transcript_file"
+        forge_test_fail 'pty history probe should capture the terminal transcript'
+        return 1
+    end
+
+    set -l transcript_output (string collect < "$transcript_file")
+    forge_test_assert_contains ': hello world' "$transcript_output" 'deferred : prompt execution should keep the original prompt visible in the terminal transcript'
+    or return 1
+    if string match -q '*_forge_deferred_exec*' -- "$transcript_output"
+        forge_test_fail 'deferred : prompt execution should not expose the helper name in the terminal transcript'
+        return 1
+    end
+    forge_test_assert_contains 'interactive prompt ok cid=cid-stub-001 input=hello world' "$transcript_output" 'deferred : prompt execution should still print Forge output'
+    or return 1
+
+    set -gx FORGE_STUB_LOG_PATH "$stub_log"
+    forge_test_assert_log_python 'any(e["raw_argv"] == ["--agent", "forge", "-p", "hello world", "--cid", "cid-stub-001"] for e in entries)' 'deferred : prompt execution should still run forge through the queued deferred argv'
     or return 1
 end
 
@@ -374,25 +487,60 @@ function test_right_prompt_reinstall_recovers_from_missing_saved_original
     functions --erase fish_right_prompt 2>/dev/null
 end
 
+function test_deferred_prompt_title_uses_original_colon_buffer
+    forge_test_reset
+
+    function fish_title
+        set -l current_command ''
+        if set -q argv[1]
+            set current_command "$argv[1]"
+        else
+            set current_command (status current-command)
+        end
+        printf 'TITLE:%s\n' "$current_command"
+    end
+
+    _forge_install_title
+    set -g _FORGE_PENDING_EXEC 1
+    set -g _FORGE_DEFERRED_EXEC_HISTORY ': hello world'
+
+    set -l deferred_title (fish_title ':' | string collect)
+    forge_test_assert_contains 'TITLE:: hello world' "$deferred_title" 'wrapped title should use the original colon buffer during deferred execution'
+    or return 1
+
+    set -g _FORGE_PENDING_EXEC 0
+    set -g _FORGE_DEFERRED_EXEC_HISTORY ''
+    set -l normal_title (fish_title ':' | string collect)
+    forge_test_assert_contains 'TITLE::' "$normal_title" 'wrapped title should preserve the normal command when no deferred prompt is active'
+    or return 1
+
+    _forge_uninstall_restore_title
+    functions --erase fish_title 2>/dev/null
+end
+
 for test_name in \
     test_doctor_wrapper \
     test_keyboard_wrapper \
     test_conversation_helpers_are_available_after_bootstrap \
     test_colon_completion_uses_native_completions \
     test_accept_line_supports_colon_command_without_space \
+    test_accept_line_treats_unknown_colon_word_as_prompt_text \
+    test_accept_line_preserves_punctuation_prompt_text \
     test_commit_matches_zsh_and_clears_commandline \
     test_config_reload_clears_all_session_overrides \
     test_model_reset_matches_zsh_config_reload_behavior \
     test_reasoning_effort_sets_session_override \
     test_config_reasoning_effort_calls_binary \
     test_exec_marks_padding_for_following_reset \
+    test_deferred_exec_repairs_history_with_original_prompt \
     test_at_completion_wraps_selected_path \
     test_fzf_wrappers_force_posix_shell_for_preview_commands \
     test_reset_adds_single_separator_for_visible_output_handoff \
     test_rprompt_falls_back_to_default_model_without_session_override \
     test_rprompt_uses_cached_zsh_output \
     test_rprompt_refreshes_immediately_after_command \
-    test_right_prompt_reinstall_recovers_from_missing_saved_original
+    test_right_prompt_reinstall_recovers_from_missing_saved_original \
+    test_deferred_prompt_title_uses_original_colon_buffer
     $test_name
     or begin
         forge_test_cleanup
