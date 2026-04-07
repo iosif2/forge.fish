@@ -1,18 +1,11 @@
-# Configuration and initialization for forge fish plugin
-# Auto-sourced by fish shell from conf.d/
-# Equivalent of shell-plugin/lib/config.zsh + shell-plugin/lib/bindings.zsh
-
-# Ensure grouped helper functions that are not autoload-safe by filename are
-# available in every session, even during install/update reloads.
+# This file owns session-scoped shell wiring: prompt wrappers, key bindings, and shared Forge globals.
 set -l __forge_plugin_root (path dirname (path dirname (status filename)))
 if test -f "$__forge_plugin_root/functions/_forge_action_conversation_helpers.fish"
     source "$__forge_plugin_root/functions/_forge_action_conversation_helpers.fish"
 end
 set --erase __forge_plugin_root
 
-# If this file is sourced again in the same shell (for example after Fisher
-# install/update), remove the old in-memory state first so the new definitions
-# can replace it cleanly.
+# Re-sourcing during install/update should replace the old in-memory plugin state first.
 if set -q _FORGE_PLUGIN_LOADED
     if functions -q _forge_uninstall
         _forge_uninstall
@@ -167,15 +160,7 @@ function __forge_refresh_prompt_cache --description 'Refresh the cached zsh rpro
 end
 
 function __forge_erase_execute_blank --on-event fish_prompt --description 'Erase the blank line Fish emits before the prompt when execute fires'
-    # commandline -f execute always outputs a newline before drawing the next
-    # prompt. For output-producing :commands we set _FORGE_SKIP_BLANK_LINE=1 so
-    # that this handler can erase that line.
-    #
-    # fish_prompt event fires once per actual prompt render — unlike
-    # __forge_maybe_refresh_prompt_cache which is also called directly by
-    # __forge_status_prompt during intermediate rprompt renders. Using a
-    # dedicated handler here ensures the flag is consumed exactly once, at the
-    # correct time: as the new prompt is about to be drawn.
+    # execute prints one extra blank line before the prompt; consume it once here.
     if test "$_FORGE_SKIP_BLANK_LINE" = 1
         set --erase _FORGE_SKIP_BLANK_LINE
         printf '\033[1A\033[2K'
@@ -218,6 +203,7 @@ function __forge_title_command --argument current_command --description 'Return 
 end
 
 function : --description 'Run Forge default : prompt through normal Fish command execution'
+    # The keybinding path rewrites ":" into a real command so Fish redraw/history match normal command execution.
     if test "$_FORGE_PENDING_EXEC" = 1
         _forge_deferred_exec
         return $status
@@ -478,7 +464,6 @@ function _forge_uninstall --on-event forge_uninstall --description 'Clean up For
     functions --erase (functions -a | string match --entire --regex '^_forge_.*$') 2>/dev/null
 end
 
-# --- Configuration variables ---
 if set -q FORGE_BIN; and test -n "$FORGE_BIN"
     set -g _FORGE_BIN "$FORGE_BIN"
 else if command -q forge

@@ -1,11 +1,3 @@
-# Core dispatcher for forge :commands
-# Port of forge-accept-line ZLE widget from shell-plugin/lib/dispatcher.zsh
-#
-# Patterns:
-#   :command [args]  - dispatch to the appropriate action handler
-#   : <text>         - default action (send text to active agent)
-#   anything else    - normal shell command execution
-
 function _forge_commandline_supports_search_field
     if set -q _FORGE_HAS_COMMANDLINE_SEARCH_FIELD
         test "$_FORGE_HAS_COMMANDLINE_SEARCH_FIELD" = 1
@@ -22,13 +14,7 @@ function _forge_commandline_supports_search_field
 end
 
 function _forge_prepare_dispatch_lite --argument buffer
-    # Lightweight version of _forge_prepare_dispatch.
-    # Does NOT queue clear-commandline (would wipe deferred-exec buffer before
-    # execute fires) and does NOT queue repaint (repaint fires after the binding
-    # returns, AFTER stdout output has been printed — queuing repaint here causes
-    # Fish to scroll back to the original prompt position and overwrite that
-    # output). Each code path in _forge_accept_line handles its own repaint or
-    # clear-commandline at the appropriate time.
+    # Cancel reader sub-modes, but leave redraw to the caller.
     set -l _forge_cancel_modes 0
     if commandline --paging-mode >/dev/null; or commandline --search-mode >/dev/null
         set _forge_cancel_modes 1
@@ -167,6 +153,7 @@ function _forge_dispatch_auth_actions --argument user_action input_text
 end
 
 function _forge_dispatch_action --argument user_action input_text
+    # Status 1 means "not handled here"; status 2 means "handler already finished UI flow".
     _forge_dispatch_core_actions "$user_action" "$input_text"
     set -l dispatch_status $status
     if test $dispatch_status -ne 1
@@ -196,18 +183,10 @@ function _forge_dispatch_action --argument user_action input_text
 end
 
 function _forge_begin_deferred_dispatch --argument buffer
-    # Hand off through the public : wrapper so Fish/tmux titles show
-    # : instead of the private _forge_deferred_exec helper while still
-    # running the deferred exec path in normal command execution.
-    # NOTE: do NOT queue clear-commandline before this — it would wipe
-    # the buffer we set here before execute fires.
-    # Preserve the original typed command so deferred execution can
-    # repair Fish history after the wrapper command runs.
+    # Route through ":" so Fish redraw/title behavior matches a real command execution.
     set -g _FORGE_DEFERRED_EXEC_HISTORY "$buffer"
     set -g _FORGE_DEFERRED_EXEC_ERASE_WRAPPER 1
     set -g _FORGE_DEFERRED_EXEC_WRAPPER_COMMAND :
-    # Hide cursor so the : text Fish echoes before running the
-    # command is not perceived as a flash.
     printf '\033[?25l'
     commandline -r :
     commandline -f execute
@@ -223,21 +202,11 @@ function _forge_finalize_dispatch --argument buffer clear_when_idle
         return 0
     end
 
-    # When visible output was produced, use commandline -f execute with an
-    # empty buffer. execute causes Fish to draw a new prompt from the
-    # CURRENT cursor position (below the output) rather than scrolling back
-    # to the original prompt position the way repaint/clear-commandline do.
-    # When no output was produced, _forge_reset handles the repaint.
+    # Visible output needs execute-driven redraw; quiet paths can use _forge_reset.
     if _forge_dispatch_has_visible_output
         set --erase _FORGE_OUTPUT_MODE
-        # Clear rprompt cache so any intermediate render (from
-        # suppress-autosuggestion or execute processing) shows nothing
-        # rather than a floating rprompt at the wrong position.
         set -g _FORGE_RPROMPT_ZSH_CACHE ""
         set -g _FORGE_RPROMPT_DIRTY 1
-        # execute adds a blank newline before drawing the new prompt.
-        # Signal _forge_skip_blank_line so the fish_prompt event handler
-        # can erase it before the prompt renders.
         set -g _FORGE_SKIP_BLANK_LINE 1
         commandline -r ""
         commandline -f execute
@@ -251,6 +220,7 @@ function _forge_finalize_dispatch --argument buffer clear_when_idle
 end
 
 function _forge_parse_exact_colon_command --argument buffer
+    # Match only single-line :command [args] forms.
     set -l captures (string match --regex '^:([a-zA-Z][a-zA-Z0-9_-]*)( (.*))?$' -- "$buffer")
     if test (count $captures) -lt 2
         return 1
@@ -270,9 +240,7 @@ function _forge_parse_colon_prompt_text --argument buffer
         return 1
     end
 
-    # Treat every other :buffer as raw prompt text, preserving punctuation,
-    # whitespace, and embedded newlines. A single optional space after : is
-    # stripped for convenience so both ":hello" and ": hello" work.
+    # Everything else starting with ":" is prompt text, not a command name.
     set -l input_text (string sub -s 2 -- "$buffer")
     if string match -q ' *' -- "$input_text"
         set input_text (string sub -s 2 -- "$input_text")
@@ -282,9 +250,6 @@ function _forge_parse_colon_prompt_text --argument buffer
 end
 
 function _forge_execute_colon_command --argument buffer user_action input_text
-    # Use lite prep (no clear-commandline) so that if the action sets
-    # _FORGE_PENDING_EXEC we can still write _forge_deferred_exec into the
-    # buffer before queueing execute.
     _forge_prepare_dispatch_lite "$buffer"
 
     set user_action (_forge_normalize_action_name "$user_action")
@@ -304,8 +269,6 @@ function _forge_execute_colon_prompt --argument buffer input_text
         return 0
     end
 
-    # Use lite prep (no clear-commandline) for the same reason as exact
-    # :command dispatch.
     _forge_prepare_dispatch_lite "$buffer"
     _forge_action_default '' "$input_text"
     _forge_finalize_dispatch "$buffer" 1

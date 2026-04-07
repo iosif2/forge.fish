@@ -1,10 +1,3 @@
-# Action handler: Rename a conversation (interactive picker or by ID)
-# Port of _forge_action_conversation_rename from shell-plugin/lib/actions/conversation.zsh
-#
-# Usage:
-#   :conversation-rename              - Interactive picker, then prompt for name
-#   :conversation-rename <id> <name>  - Rename specific conversation directly
-
 function _forge_action_conversation_rename
     set -l input_text ""
     if test (count $argv) -ge 1
@@ -13,9 +6,7 @@ function _forge_action_conversation_rename
 
     echo
 
-    # If input looks like "<id> <name>", split and rename directly
     if test -n "$input_text"
-        # Split on first space: id is before, name is after
         set -l parts (string split -m1 ' ' -- "$input_text")
         set -l conversation_id $parts[1]
         set -l new_name ""
@@ -24,7 +15,6 @@ function _forge_action_conversation_rename
         end
 
         if test -z "$new_name"
-            # Only one arg provided -- not enough
             _forge_log error "Usage: :conversation-rename <id> <name>"
             return 0
         end
@@ -33,7 +23,6 @@ function _forge_action_conversation_rename
         return 0
     end
 
-    # No args -- show interactive picker
     set -l conversations_output ($_FORGE_BIN conversation list --porcelain 2>/dev/null | string collect)
 
     if test -z "$conversations_output"
@@ -61,7 +50,6 @@ function _forge_action_conversation_rename
     if test -n "$selected_conversation"
         set -l conversation_id (echo "$selected_conversation" | sed -E 's/  .*//' | tr -d '\n')
 
-        # Prompt for new name
         read -P "Enter new name: " new_name </dev/tty
 
         if test -n "$new_name"

@@ -1,21 +1,11 @@
-# Custom completion handler for forge fish plugin
-# Port of forge-completion ZLE widget from zsh.
-# Handles @file completion, :command completion, and normal fish completion.
-# Bound to Tab in conf.d/forge.fish.
-# Usage: bound via `bind \t _forge_completion`
-
 function _forge_completion
-    # Get the full buffer and cursor position
     set -l buf (commandline)
     set -l cursor_pos (commandline -C)
 
-    # Get text before cursor
     set -l lbuffer (string sub -l $cursor_pos -- "$buf")
 
-    # Get current word (last space-separated token before cursor)
     set -l current_word (string match -r '[^ ]*$' -- "$lbuffer")
 
-    # Handle @ completion (files and directories)
     if string match -rq '^@' -- "$current_word"
         set -l filter_text (string sub -s 2 -- "$current_word")
         set -l fzf_args \
@@ -42,7 +32,6 @@ function _forge_completion
 
         if test -n "$selected"
             set selected "@[$selected]"
-            # Replace current_word in lbuffer with the selection
             set -l prefix (string sub -l (math $cursor_pos - (string length -- "$current_word")) -- "$buf")
             set -l rbuffer (string sub -s (math $cursor_pos + 1) -- "$buf")
             set -l new_buf "$prefix$selected$rbuffer"
@@ -54,8 +43,6 @@ function _forge_completion
         return 0
     end
 
-    # Handle :command completion using the same porcelain rows and fzf layout
-    # as the zsh plugin.
     if string match -rq '^:([a-zA-Z][a-zA-Z0-9_-]*)?$' -- "$lbuffer"
         set -l filter_text (string sub -s 2 -- "$lbuffer")
         set -l commands_list (_forge_get_commands | string collect)
@@ -94,6 +81,5 @@ function _forge_completion
         return 0
     end
 
-    # Fall back to default fish completion
     commandline -f complete
 end

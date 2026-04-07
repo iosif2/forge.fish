@@ -1,9 +1,3 @@
-# Action handler: Run shell-native diagnostics for the Fish plugin
-# Checks the local Fish integration state without delegating to the forge
-# binary so it can diagnose plugin issues even when forge subcommands are
-# unavailable or mismatched.
-# Usage: _forge_action_doctor
-
 function _forge_doctor_section
     printf '%s%s%s\n' (set_color --bold white) "$argv[1]" (set_color normal)
 end
@@ -12,8 +6,6 @@ function _forge_doctor_detail
     printf '  %s%s%s\n' (set_color 888888) "$argv[1]" (set_color normal)
 end
 
-# Returns 0 if actual_version >= min_version (semantic version comparison).
-# Strips a leading 'v' and ignores non-numeric suffixes on each segment.
 function _forge_doctor_version_gte
     set -l v1 (string replace -r '^v' '' -- (string split ' ' -- $argv[1])[1])
     set -l v2 (string replace -r '^v' '' -- $argv[2])

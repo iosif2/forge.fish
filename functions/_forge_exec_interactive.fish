@@ -1,23 +1,12 @@
-# Execute forge commands interactively with TTY redirection
-# Same as _forge_exec but connects stdin/stdout/stderr to /dev/tty so that
-# interactive prompts (rustyline, fzf, etc.) work correctly when forge
-# is launched from a key binding context. Fish key binding functions
-# do not have direct terminal access, so without this redirect any
-# readline library would see a non-tty stdin and return EOF immediately.
-# Do NOT use inside (command) substitutions - use _forge_exec instead.
-# Usage: _forge_exec_interactive <args...>
-
 function _forge_exec_interactive
-    # Determine active agent, default to "forge"
+    # Reader widgets do not own the tty, so interactive Forge subcommands must be rebound to /dev/tty here.
     set -l agent_id "forge"
     if test -n "$_FORGE_ACTIVE_AGENT"
         set agent_id "$_FORGE_ACTIVE_AGENT"
     end
 
-    # Build command array
     set -l cmd $_FORGE_BIN --agent "$agent_id"
 
-    # Export session model/provider if set
     if test -n "$_FORGE_SESSION_MODEL"
         set -lx FORGE_SESSION__MODEL_ID "$_FORGE_SESSION_MODEL"
     end
@@ -28,14 +17,9 @@ function _forge_exec_interactive
         set -lx FORGE_REASONING__EFFORT "$_FORGE_SESSION_REASONING_EFFORT"
     end
 
-    # Execute with full TTY redirection for interactive use
     $cmd $argv </dev/tty >/dev/tty 2>/dev/tty
     set -l cmd_status $status
 
-    # Interactive Forge output leaves the cursor at the correct terminal
-    # position. Mark that visible output occurred so _forge_accept_line can hand
-    # the next prompt draw back to Fish through execute, which redraws the prompt
-    # immediately without leaving a blank reader line behind.
     set -g _FORGE_OUTPUT_MODE visible
     set -g _FORGE_RPROMPT_DIRTY 1
     return $cmd_status

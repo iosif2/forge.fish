@@ -1,10 +1,3 @@
-# Action handler: Select model for the current session only.
-# Port of _forge_action_session_model from zsh.
-# Sets _FORGE_SESSION_MODEL and _FORGE_SESSION_PROVIDER in the shell environment
-# so that every subsequent forge invocation uses those values via --model /
-# --provider flags without touching the permanent global configuration.
-# Usage: _forge_action_session_model [input_text]
-
 function _forge_action_session_model
     set -l input_text $argv[1]
     echo
@@ -13,8 +6,6 @@ function _forge_action_session_model
     set -l current_provider
     set -l provider_index
 
-    # Use session overrides as the starting selection if already set,
-    # otherwise fall back to the globally configured values.
     if test -n "$_FORGE_SESSION_MODEL"
         set current_model "$_FORGE_SESSION_MODEL"
         set provider_index 4

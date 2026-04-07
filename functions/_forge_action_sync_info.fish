@@ -1,6 +1,3 @@
-# Action handler: Show workspace info with sync details
-# Usage: _forge_action_sync_info [workspace_path]
-
 function _forge_action_sync_info
     set -l workspace_path "."
     if test (count $argv) -ge 1; and test -n "$argv[1]"

@@ -1,13 +1,3 @@
-# Default action handler: set active agent or execute command
-# Port of _forge_action_default from shell-plugin/lib/dispatcher.zsh
-#
-# Flow:
-# 1. Check if user_action is a CUSTOM command -> execute with `cmd` subcommand
-# 2. If no input_text -> switch to agent (for AGENT type commands)
-# 3. If input_text -> execute command with active agent context
-#
-# Usage: _forge_action_default <user_action> <input_text>
-
 function _forge_action_default
     set -l user_action $argv[1]
     set -l input_text ""
@@ -16,11 +6,10 @@ function _forge_action_default
     end
     set -l command_type ""
 
-    # Validate that the command exists in show-commands (if user_action is provided)
+    # Named custom commands bypass agent switching and run through `forge cmd execute`.
     if test -n "$user_action"
         set -l commands_list (_forge_get_commands | string collect)
         if test -n "$commands_list"
-            # Check if the user_action is in the list of valid commands and extract the row
             set -l command_row (echo "$commands_list" | grep "^$user_action\b")
             if test -z "$command_row"
                 echo
@@ -28,19 +17,14 @@ function _forge_action_default
                 return 0
             end
 
-            # Extract the command type from the second field (TYPE column)
-            # Format: "COMMAND_NAME    TYPE    DESCRIPTION"
             set command_type (echo "$command_row" | awk '{print $2}')
-            # Case-insensitive comparison
             if test (string lower -- "$command_type") = custom
-                # Generate conversation ID if needed
                 if test -z "$_FORGE_CONVERSATION_ID"
                     set -l new_id ($_FORGE_BIN conversation new)
                     set -g _FORGE_CONVERSATION_ID "$new_id"
                 end
 
                 echo
-                # Execute custom command with execute subcommand
                 if test -n "$input_text"
                     _forge_exec cmd execute --cid "$_FORGE_CONVERSATION_ID" "$user_action" "$input_text"
                 else
@@ -51,7 +35,7 @@ function _forge_action_default
         end
     end
 
-    # If input_text is empty, just set the active agent (only for AGENT type commands)
+    # With no prompt text, a valid AGENT command only changes shell-local active agent state.
     if test -z "$input_text"
         if test -n "$user_action"
             if test (string lower -- "$command_type") != agent
@@ -60,28 +44,22 @@ function _forge_action_default
                 return 0
             end
             echo
-            # Set the agent in the global variable
             set -g _FORGE_ACTIVE_AGENT "$user_action"
             _forge_log info (set_color --bold white)(string upper -- "$_FORGE_ACTIVE_AGENT")(set_color normal)" "(set_color 888888)"is now the active agent"(set_color normal)
         end
         return 0
     end
 
-    # Generate conversation ID if needed
+    # Prompt text always goes through deferred execution so Fish redraws after Forge finishes.
     if test -z "$_FORGE_CONVERSATION_ID"
         set -l new_id ($_FORGE_BIN conversation new)
         set -g _FORGE_CONVERSATION_ID "$new_id"
     end
 
-    # Only set the agent if user explicitly specified one
     if test -n "$user_action"
         set -g _FORGE_ACTIVE_AGENT "$user_action"
     end
 
-    # Queue the forge invocation for _forge_deferred_exec. The key binding will
-    # write "_forge_deferred_exec" to the commandline and call
-    # "commandline -f execute", so Fish runs forge as a real command with
-    # correct cursor tracking. Background sync/update are called from there.
     set -g _FORGE_PENDING_EXEC 1
     set -g -- _FORGE_PENDING_EXEC_ARGV -p $input_text --cid $_FORGE_CONVERSATION_ID
 end

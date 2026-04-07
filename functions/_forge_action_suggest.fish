@@ -1,11 +1,3 @@
-# Action handler: Generate shell command from natural language
-# Port of _forge_action_suggest from shell-plugin/lib/actions/editor.zsh
-#
-# Takes a natural language description and generates a shell command,
-# loading it into the command line buffer for the user to review and execute.
-#
-# Usage: _forge_action_suggest <description>
-
 function _forge_action_suggest
     set -l description ""
     if test (count $argv) -ge 1
@@ -19,13 +11,11 @@ function _forge_action_suggest
 
     echo
 
-    # Generate the command
     set -lx FORCE_COLOR true
     set -lx CLICOLOR_FORCE 1
     set -l generated_command (_forge_exec suggest "$description" | string collect)
 
     if test -n "$generated_command"
-        # Replace the buffer with the generated command
         commandline -r "$generated_command"
         commandline -f repaint
     else

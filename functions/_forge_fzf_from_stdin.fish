@@ -1,11 +1,3 @@
-# Keybinding-safe fzf helper for Fish reader widgets.
-# Usage:
-#   printf 'a\nb\n' | _forge_fzf_from_stdin [additional fzf options...]
-#   _forge_fzf_from_stdin --input-file /path/to/candidates [additional fzf options...]
-#
-# The selected value is stored in $_FORGE_FZF_SELECTION so callers do not need
-# nested command substitutions while running inside a bind handler.
-
 function _forge_fzf_from_stdin --description 'Run fzf with candidates from stdin or a file while attaching the UI to /dev/tty'
     set -g _FORGE_FZF_SELECTION ""
 
@@ -49,6 +41,7 @@ function _forge_fzf_from_stdin --description 'Run fzf with candidates from stdin
     end
 
     if test -r /dev/tty; and test -w /dev/tty
+        # Keybinding callers need fzf attached to the real tty, not the reader pipe.
         set -l default_command (string join ' ' cat (string escape --style=script -- "$input_file"))
         set -l escaped_default_command (string escape --style=script -- "$default_command")
         set -l escaped_output_file (string escape --style=script -- "$output_file")
@@ -95,4 +88,3 @@ function _forge_fzf_from_stdin --description 'Run fzf with candidates from stdin
 
     return $fzf_status
 end
-

@@ -1,10 +1,3 @@
-# Action handler: Rename current conversation
-# Port of _forge_action_rename from shell-plugin/lib/actions/conversation.zsh
-#
-# Renames the current active conversation. Requires a name argument.
-#
-# Usage: _forge_action_rename <name>
-
 function _forge_action_rename
     set -l input_text ""
     if test (count $argv) -ge 1

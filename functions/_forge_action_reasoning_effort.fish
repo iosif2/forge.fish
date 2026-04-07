@@ -1,9 +1,3 @@
-# Action handler: Select reasoning effort for the current session only.
-# Port of _forge_action_reasoning_effort from zsh.
-# Sets _FORGE_SESSION_REASONING_EFFORT for the current shell session without
-# modifying global config.
-# Usage: _forge_action_reasoning_effort [input_text]
-
 function _forge_action_reasoning_effort
     set -l input_text $argv[1]
     echo

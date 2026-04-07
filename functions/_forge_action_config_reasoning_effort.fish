@@ -1,8 +1,3 @@
-# Action handler: Set reasoning effort in global config.
-# Port of _forge_action_config_reasoning_effort from zsh.
-# Calls `forge config set reasoning-effort <effort>` on selection.
-# Usage: _forge_action_config_reasoning_effort [input_text]
-
 function _forge_action_config_reasoning_effort
     set -l input_text $argv[1]
     echo
