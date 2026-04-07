@@ -1,9 +1,13 @@
-# This file owns session-scoped shell wiring: prompt wrappers, key bindings, and shared Forge globals.
-set -l __forge_plugin_root (path dirname (path dirname (status filename)))
-if test -f "$__forge_plugin_root/functions/_forge_conversation_helpers.fish"
-    source "$__forge_plugin_root/functions/_forge_conversation_helpers.fish"
+function __forge_source_helpers --description 'Source helper files that cannot rely on filename-based autoload'
+    set -l plugin_root (path dirname (path dirname (status filename)))
+    set -l helpers_file "$plugin_root/functions/_forge_conversation_helpers.fish"
+    if test -f "$helpers_file"
+        source "$helpers_file"
+    end
 end
-set --erase __forge_plugin_root
+
+__forge_source_helpers
+functions --erase __forge_source_helpers
 
 # Re-sourcing during install/update should replace the old in-memory plugin state first.
 if set -q _FORGE_PLUGIN_LOADED

@@ -1,35 +1,42 @@
+function _forge_command_session_model_selected_field --argument row field_number
+    _forge_porcelain_find_index_field "$row" "$field_number"
+end
+
+function _forge_command_session_model_current
+    set -l current_model "$_FORGE_SESSION_MODEL"
+    set -l current_provider "$_FORGE_SESSION_PROVIDER"
+    set -l provider_field 4
+
+    if test -z "$current_model"
+        set current_model ($_FORGE_BIN config get model 2>/dev/null | string collect)
+        set provider_field 3
+    end
+
+    if test -z "$current_provider"
+        set current_provider ($_FORGE_BIN config get provider 2>/dev/null | string collect)
+        set provider_field 3
+    end
+
+    printf '%s\n%s\n%s\n' "$current_model" "$current_provider" "$provider_field"
+end
+
 function _forge_command_session_model
-    set -l input_text $argv[1]
+    set -l query "$argv[1]"
+
     echo
 
-    set -l current_model
-    set -l current_provider
-    set -l provider_index
+    set -l current (_forge_command_session_model_current)
+    set -l current_model "$current[1]"
+    set -l current_provider "$current[2]"
+    set -l provider_field "$current[3]"
 
-    if test -n "$_FORGE_SESSION_MODEL"
-        set current_model "$_FORGE_SESSION_MODEL"
-        set provider_index 4
-    else
-        set current_model ($_FORGE_BIN config get model 2>/dev/null)
-        set provider_index 3
-    end
-    if test -n "$_FORGE_SESSION_PROVIDER"
-        set current_provider "$_FORGE_SESSION_PROVIDER"
-        set provider_index 4
-    else
-        set current_provider ($_FORGE_BIN config get provider 2>/dev/null)
-        set provider_index 3
+    set -l selected_row (_forge_model_pick 'Session Model > ' "$current_model" "$query" "$current_provider" "$provider_field")
+    if test -z "$selected_row"
+        return 0
     end
 
-    set -l selected (_forge_model_pick "Session Model > " "$current_model" "$input_text" "$current_provider" "$provider_index")
+    set -g _FORGE_SESSION_MODEL (_forge_command_session_model_selected_field "$selected_row" 1)
+    set -g _FORGE_SESSION_PROVIDER (_forge_command_session_model_selected_field "$selected_row" 4)
 
-    if test -n "$selected"
-        set -l model_id (echo "$selected" | awk -F '  +' '{print $1}' | string trim)
-        set -l provider_id (echo "$selected" | awk -F '  +' '{print $4}' | string trim)
-
-        set -g _FORGE_SESSION_MODEL "$model_id"
-        set -g _FORGE_SESSION_PROVIDER "$provider_id"
-
-        _forge_report success "Session model set to "(set_color --bold)"$model_id"(set_color normal)" (provider: "(set_color --bold)"$provider_id"(set_color normal)")"
-    end
+    _forge_report success "Session model set to "(set_color --bold)"$_FORGE_SESSION_MODEL"(set_color normal)" (provider: "(set_color --bold)"$_FORGE_SESSION_PROVIDER"(set_color normal)")"
 end

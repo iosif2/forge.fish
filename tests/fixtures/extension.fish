@@ -27,6 +27,15 @@ function forge_test_bootstrap
     end
 end
 
+function forge_test_exit_if_failed
+    if test $argv[1] -eq 0
+        return 0
+    end
+
+    forge_test_cleanup
+    exit 1
+end
+
 function forge_test_setup_tmpdir
     set -gx FORGE_TEST_TMPDIR (mktemp -d)
     set -gx FORGE_STUB_LOG_PATH "$FORGE_TEST_TMPDIR/calls.jsonl"

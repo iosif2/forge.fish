@@ -63,18 +63,21 @@ function _forge_complete_colons --description 'Emit completion candidates for Fo
         'sage|Strategic reasoning agent' \
         'muse|Planning agent'
 
+    function _forge_complete_colons_emit --no-scope-shadowing --argument command_name description
+        contains -- "$command_name" $seen_commands
+        and return 0
+
+        set -a seen_commands "$command_name"
+        printf '%s\t%s\n' "$command_name" "$description"
+    end
+
     for row in $static_commands
         set -l parts (string split -m 1 '|' -- "$row")
         if test (count $parts) -lt 2
             continue
         end
 
-        if contains -- "$parts[1]" $seen_commands
-            continue
-        end
-
-        set -a seen_commands "$parts[1]"
-        printf '%s\t%s\n' "$parts[1]" "$parts[2]"
+        _forge_complete_colons_emit "$parts[1]" "$parts[2]"
     end
 
     set -l commands_list (_forge_commands_get | string collect)
@@ -94,11 +97,8 @@ function _forge_complete_colons --description 'Emit completion candidates for Fo
             continue
         end
 
-        if contains -- "$command_name" $seen_commands
-            continue
-        end
-
-        set -a seen_commands "$command_name"
-        printf '%s\t%s\n' "$command_name" "$description"
+        _forge_complete_colons_emit "$command_name" "$description"
     end
+
+    functions --erase _forge_complete_colons_emit
 end

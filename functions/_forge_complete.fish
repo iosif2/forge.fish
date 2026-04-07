@@ -1,9 +1,7 @@
 function _forge_complete
     set -l buf (commandline)
     set -l cursor_pos (commandline -C)
-
     set -l lbuffer (string sub -l $cursor_pos -- "$buf")
-
     set -l current_word (string match -r '[^ ]*$' -- "$lbuffer")
 
     if string match -rq '^@' -- "$current_word"

@@ -9,6 +9,26 @@ function _forge_refresh_colons --description 'Create synthetic :command function
     set -l registered_names
     set -l command_lines (_forge_complete_colons)
 
+    function _forge_refresh_colons_register --no-scope-shadowing --argument command_name description
+        contains -- "$command_name" $registered_names
+        and return 0
+
+        set -a registered_names "$command_name"
+
+        set -l function_name ":$command_name"
+        set -l escaped_name (string escape --style=script -- "$function_name")
+
+        if test -n "$description"
+            set -l escaped_description (string escape --style=script -- "$description")
+            eval "function $escaped_name --description $escaped_description; return 0; end"
+            complete -c "$function_name" -f -d "$description"
+            return 0
+        end
+
+        eval "function $escaped_name; return 0; end"
+        complete -c "$function_name" -f
+    end
+
     for line in $command_lines
         if test -z "$line"
             continue
@@ -29,23 +49,9 @@ function _forge_refresh_colons --description 'Create synthetic :command function
             continue
         end
 
-        if contains -- "$command_name" $registered_names
-            continue
-        end
-        set -a registered_names "$command_name"
-
-        set -l function_name ":$command_name"
-        set -l escaped_name (string escape --style=script -- "$function_name")
-
-        if test -n "$description"
-            set -l escaped_description (string escape --style=script -- "$description")
-            eval "function $escaped_name --description $escaped_description; return 0; end"
-            complete -c "$function_name" -f -d "$description"
-        else
-            eval "function $escaped_name; return 0; end"
-            complete -c "$function_name" -f
-        end
+        _forge_refresh_colons_register "$command_name" "$description"
     end
 
     set -g _FORGE_COLON_COMMAND_NAMES $registered_names
+    functions --erase _forge_refresh_colons_register
 end

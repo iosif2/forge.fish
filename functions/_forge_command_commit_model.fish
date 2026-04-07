@@ -1,17 +1,23 @@
+function _forge_command_commit_model_config
+    set -l output (_forge_run config get commit 2>/dev/null | string collect)
+    set -l lines (string split \n -- "$output")
+    printf '%s\n%s\n' "$lines[2]" "$lines[1]"
+end
+
 function _forge_command_commit_model
-    set -l input_text $argv[1]
+    set -l query "$argv[1]"
 
     echo
-    set -l commit_output (_forge_run config get commit 2>/dev/null | string collect)
-    set -l current_commit_provider (echo "$commit_output" | head -n 1)
-    set -l current_commit_model (echo "$commit_output" | tail -n 1)
 
-    set -l selected (_forge_model_pick "Commit Model > " "$current_commit_model" "$input_text" "$current_commit_provider" 4)
-
-    if test -n "$selected"
-        set -l model_id (echo "$selected" | awk -F '  +' '{print $1}' | string trim)
-        set -l provider_id (echo "$selected" | awk -F '  +' '{print $4}' | string trim)
-
-        _forge_run config set commit "$provider_id" "$model_id"
+    set -l current (_forge_command_commit_model_config)
+    set -l current_model "$current[1]"
+    set -l current_provider "$current[2]"
+    set -l selected_row (_forge_model_pick 'Commit Model > ' "$current_model" "$query" "$current_provider" 4)
+    if test -z "$selected_row"
+        return 0
     end
+
+    _forge_run config set commit \
+        (_forge_porcelain_find_index_field "$selected_row" 4) \
+        (_forge_porcelain_find_index_field "$selected_row" 1)
 end

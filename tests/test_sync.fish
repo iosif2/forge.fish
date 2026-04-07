@@ -68,28 +68,16 @@ function test_background_sync_after_workspace_info
 end
 
 test_foreground_sync
-or begin
-    forge_test_cleanup
-    exit 1
-end
+forge_test_exit_if_failed $status
 
 test_foreground_sync_forwards_explicit_workspace_path
-or begin
-    forge_test_cleanup
-    exit 1
-end
+forge_test_exit_if_failed $status
 
 test_foreground_sync_init_uses_current_directory_by_default
-or begin
-    forge_test_cleanup
-    exit 1
-end
+forge_test_exit_if_failed $status
 
 test_background_sync_after_workspace_info
-or begin
-    forge_test_cleanup
-    exit 1
-end
+forge_test_exit_if_failed $status
 
 forge_test_cleanup
 printf 'test_sync: ok\n'

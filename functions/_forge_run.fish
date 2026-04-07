@@ -1,10 +1,8 @@
 function _forge_run
-    set -l agent_id "forge"
-    if test -n "$_FORGE_ACTIVE_AGENT"
-        set agent_id "$_FORGE_ACTIVE_AGENT"
+    set -l agent_id "$_FORGE_ACTIVE_AGENT"
+    if test -z "$agent_id"
+        set agent_id forge
     end
-
-    set -l cmd $_FORGE_BIN --agent "$agent_id"
 
     if test -n "$_FORGE_SESSION_MODEL"
         set -lx FORGE_SESSION__MODEL_ID "$_FORGE_SESSION_MODEL"
@@ -16,7 +14,7 @@ function _forge_run
         set -lx FORGE_REASONING__EFFORT "$_FORGE_SESSION_REASONING_EFFORT"
     end
 
-    $cmd $argv
+    $_FORGE_BIN --agent "$agent_id" $argv
     set -l cmd_status $status
 
     set -g _FORGE_OUTPUT_MODE visible

@@ -36,12 +36,14 @@ function _forge_command_doctor
     set -l warnings 0
     set -l failed 0
 
+    set -l terminal_program "$TERM_PROGRAM"
+    set -l terminal_version "$TERM_PROGRAM_VERSION"
     set -l terminal_info "$TERM"
-    if test -n "$TERM_PROGRAM"
-        if test -n "$TERM_PROGRAM_VERSION"
-            set terminal_info "$TERM_PROGRAM $TERM_PROGRAM_VERSION"
+    if test -n "$terminal_program"
+        if test -n "$terminal_version"
+            set terminal_info "$terminal_program $terminal_version"
         else
-            set terminal_info "$TERM_PROGRAM"
+            set terminal_info "$terminal_program"
         end
     end
 

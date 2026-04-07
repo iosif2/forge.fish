@@ -45,22 +45,13 @@ function test_custom_preprocessing
 end
 
 test_commands_cache
-or begin
-    forge_test_cleanup
-    exit 1
-end
+forge_test_exit_if_failed $status
 
 test_agent_branch
-or begin
-    forge_test_cleanup
-    exit 1
-end
+forge_test_exit_if_failed $status
 
 test_custom_preprocessing
-or begin
-    forge_test_cleanup
-    exit 1
-end
+forge_test_exit_if_failed $status
 
 forge_test_cleanup
 printf 'test_commands: ok\n'

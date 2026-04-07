@@ -24,7 +24,6 @@ function _forge_run_deferred
     end
 
     if test "$_erase_wrapper" = 1; or test -n "$_history_line"
-        # Replace the internal wrapper entry with the original :prompt line.
         set -l _history_wrapper _forge_run_deferred
         if test -n "$_wrapper_command"
             set _history_wrapper "$_wrapper_command"
@@ -37,7 +36,6 @@ function _forge_run_deferred
     end
 
     if test -n "$_history_line"
-        # Reprint what the user typed before Forge output starts.
         printf '%s\n' "$_history_line"
     end
 
@@ -49,9 +47,9 @@ function _forge_run_deferred
     set -l _pending_argv $_FORGE_PENDING_EXEC_ARGV
     set --erase _FORGE_PENDING_EXEC_ARGV
 
-    set -l _agent forge
-    if test -n "$_FORGE_ACTIVE_AGENT"
-        set _agent "$_FORGE_ACTIVE_AGENT"
+    set -l _agent "$_FORGE_ACTIVE_AGENT"
+    if test -z "$_agent"
+        set _agent forge
     end
 
     if test -n "$_FORGE_SESSION_MODEL"
@@ -67,7 +65,6 @@ function _forge_run_deferred
     $_FORGE_BIN --agent $_agent $_pending_argv
 
     if test -t 1
-        # Keep the next Fish prompt below Forge output even when Forge omits a trailing newline.
         printf '\r\n'
     end
 

@@ -1,4 +1,5 @@
 function _forge_command_env
     echo
-    _forge_run env
+    set -l subcommand env
+    _forge_run "$subcommand"
 end

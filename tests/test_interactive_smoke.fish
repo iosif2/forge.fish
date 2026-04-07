@@ -47,22 +47,13 @@ function test_muse_interactive_prompt
 end
 
 test_default_interactive_prompt
-or begin
-    forge_test_cleanup
-    exit 1
-end
+forge_test_exit_if_failed $status
 
 test_sage_interactive_prompt
-or begin
-    forge_test_cleanup
-    exit 1
-end
+forge_test_exit_if_failed $status
 
 test_muse_interactive_prompt
-or begin
-    forge_test_cleanup
-    exit 1
-end
+forge_test_exit_if_failed $status
 
 forge_test_cleanup
 printf 'test_interactive_smoke: ok\n'

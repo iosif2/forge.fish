@@ -28,16 +28,10 @@ function test_custom_reuses_existing_conversation
 end
 
 test_custom_creates_conversation_once
-or begin
-    forge_test_cleanup
-    exit 1
-end
+forge_test_exit_if_failed $status
 
 test_custom_reuses_existing_conversation
-or begin
-    forge_test_cleanup
-    exit 1
-end
+forge_test_exit_if_failed $status
 
 forge_test_cleanup
 printf 'test_custom_commands: ok\n'

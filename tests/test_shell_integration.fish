@@ -32,6 +32,94 @@ function test_keyboard_wrapper
     or return 1
 end
 
+function test_agent_command_accepts_explicit_agent_id
+    forge_test_reset
+
+    _forge_command_agent sage >/dev/null
+
+    forge_test_assert_eq 'sage' "$_FORGE_ACTIVE_AGENT" 'agent command should activate an explicit agent id'
+    or return 1
+    forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["list", "agents", "--porcelain"]' 'agent command should validate explicit agent ids against the agent list'
+    or return 1
+end
+
+function test_agent_command_uses_picker_selection
+    forge_test_reset
+    set -g _FORGE_ACTIVE_AGENT 'muse'
+
+    function _forge_fzf
+        printf 'sage    SAGE    builtin    yes    text    Strategic reasoning agent\n'
+    end
+
+    _forge_command_agent >/dev/null
+    functions --erase _forge_fzf
+
+    forge_test_assert_eq 'sage' "$_FORGE_ACTIVE_AGENT" 'agent command should activate the picked agent'
+    or return 1
+    forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["list", "agents", "--porcelain"]' 'agent picker should source candidates from the agent list'
+    or return 1
+end
+
+function test_agent_command_rejects_unknown_agent_id
+    forge_test_reset
+
+    set -l output (_forge_command_agent unknown | string collect)
+    set -l normalized_output (string replace -ra "\\e\\[[0-9;?]*[ -/]*[@-~]" "" -- "$output")
+
+    forge_test_assert_contains "Agent 'unknown'" "$normalized_output" 'agent command should report unknown explicit agent ids'
+    or return 1
+    forge_test_assert_eq '' "$_FORGE_ACTIVE_AGENT" 'agent command should leave the active agent unchanged on validation failure'
+    or return 1
+end
+
+function test_clone_command_accepts_explicit_conversation_id
+    forge_test_reset
+    set -g _FORGE_CONVERSATION_ID 'cid-current'
+    set -gx FORGE_STUB_CLONE_OUTPUT 'Cloned cid-alpha to 22222222-2222-2222-2222-222222222222'
+
+    _forge_command_clone cid-alpha >/dev/null
+
+    forge_test_assert_eq '22222222-2222-2222-2222-222222222222' "$_FORGE_CONVERSATION_ID" 'clone command should switch to the cloned conversation id'
+    or return 1
+    forge_test_assert_eq 'cid-current' "$_FORGE_PREVIOUS_CONVERSATION_ID" 'clone command should preserve the previous conversation when switching'
+    or return 1
+    forge_test_assert_log_python 'len(entries) == 3 and entries[0]["argv"] == ["conversation", "clone", "cid-alpha"] and entries[1]["argv"] == ["conversation", "show", "22222222-2222-2222-2222-222222222222"] and entries[2]["argv"] == ["conversation", "info", "22222222-2222-2222-2222-222222222222"]' 'clone command should clone the target and show the new conversation details'
+    or return 1
+end
+
+function test_clone_command_uses_picker_selection
+    forge_test_reset
+    set -g _FORGE_CONVERSATION_ID 'cid-beta'
+    set -gx FORGE_STUB_CLONE_OUTPUT 'Cloned cid-alpha to 33333333-3333-3333-3333-333333333333'
+
+    function _forge_fzf
+        printf 'cid-alpha    Alpha thread    2026-04-08\n'
+    end
+
+    _forge_command_clone >/dev/null
+    functions --erase _forge_fzf
+
+    forge_test_assert_eq '33333333-3333-3333-3333-333333333333' "$_FORGE_CONVERSATION_ID" 'clone picker should switch to the cloned conversation id'
+    or return 1
+    forge_test_assert_log_python 'len(entries) == 4 and entries[0]["argv"] == ["conversation", "list", "--porcelain"] and entries[1]["argv"] == ["conversation", "clone", "cid-alpha"] and entries[2]["argv"] == ["conversation", "show", "33333333-3333-3333-3333-333333333333"] and entries[3]["argv"] == ["conversation", "info", "33333333-3333-3333-3333-333333333333"]' 'clone picker should source candidates from conversation list before cloning the selection'
+    or return 1
+end
+
+function test_clone_command_reports_empty_list
+    forge_test_reset
+
+    function _forge_command_clone_list
+        return 0
+    end
+
+    set -l output (_forge_command_clone | string collect)
+    set -l normalized_output (string replace -ra "\\e\\[[0-9;?]*[ -/]*[@-~]" "" -- "$output")
+    functions --erase _forge_command_clone_list
+
+    forge_test_assert_contains 'No conversations found' "$normalized_output" 'clone command should report when there are no conversations to pick from'
+    or return 1
+end
+
 function test_conversation_helpers_are_available_after_bootstrap
     forge_test_reset
     set -g _FORGE_CONVERSATION_ID 'cid-old'
@@ -599,6 +687,12 @@ end
 for test_name in \
     test_doctor_wrapper \
     test_keyboard_wrapper \
+    test_agent_command_accepts_explicit_agent_id \
+    test_agent_command_uses_picker_selection \
+    test_agent_command_rejects_unknown_agent_id \
+    test_clone_command_accepts_explicit_conversation_id \
+    test_clone_command_uses_picker_selection \
+    test_clone_command_reports_empty_list \
     test_conversation_helpers_are_available_after_bootstrap \
     test_conversation_helpers_are_available_when_conf_is_sourced_directly \
     test_colon_completion_uses_native_completions \

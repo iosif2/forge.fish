@@ -1,7 +1,7 @@
 function _forge_command_sync_status
-    set -l workspace_path "."
-    if test (count $argv) -ge 1; and test -n "$argv[1]"
-        set workspace_path "$argv[1]"
+    set -l workspace_path "$argv[1]"
+    if test -z "$workspace_path"
+        set workspace_path .
     end
 
     echo

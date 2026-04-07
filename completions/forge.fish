@@ -3,9 +3,9 @@ function __fish_forge_global_optspecs
 end
 
 function __fish_forge_needs_command
-	set -l cmd (commandline -opc)
-	set -e cmd[1]
-	argparse -s (__fish_forge_global_optspecs) -- $cmd 2>/dev/null
+	set -l words (commandline -opc)
+	set -e words[1]
+	argparse -s (__fish_forge_global_optspecs) -- $words 2>/dev/null
 	or return
 	if set -q argv[1]
 		echo $argv[1]
@@ -15,10 +15,10 @@ function __fish_forge_needs_command
 end
 
 function __fish_forge_using_subcommand
-	set -l cmd (__fish_forge_needs_command)
-	test -z "$cmd"
+	set -l subcommand (__fish_forge_needs_command)
+	test -z "$subcommand"
 	and return 1
-	contains -- $cmd[1] $argv
+	contains -- $subcommand[1] $argv
 end
 
 complete -c forge -n "__fish_forge_needs_command" -s p -l prompt -d 'Direct prompt to process without entering interactive mode' -r

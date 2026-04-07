@@ -1,18 +1,14 @@
 function _forge_command_commit
-    set -l additional_context ""
-    if test (count $argv) -ge 1
-        set additional_context $argv[1]
+    set -l additional_context "$argv[1]"
+    set -l commit_args --max-diff "$_FORGE_MAX_COMMIT_DIFF"
+
+    if test -n "$additional_context"
+        set -a commit_args "$additional_context"
     end
 
     echo
 
     set -lx FORCE_COLOR true
     set -lx CLICOLOR_FORCE 1
-    set -l commit_message
-    if test -n "$additional_context"
-        set commit_message ($_FORGE_BIN commit --max-diff "$_FORGE_MAX_COMMIT_DIFF" $additional_context | string collect)
-    else
-        set commit_message ($_FORGE_BIN commit --max-diff "$_FORGE_MAX_COMMIT_DIFF" | string collect)
-    end
+    set -l _commit_message ($_FORGE_BIN commit $commit_args | string collect)
 end
-
