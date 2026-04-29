@@ -128,7 +128,27 @@ function __forge_zsh_rprompt --description 'Fetch the latest zsh rprompt output 
         set forge_bin forge
     end
 
-    $forge_bin zsh rprompt 2>/dev/null
+    set -l prompt_env
+    if test -n "$_FORGE_SESSION_MODEL"
+        set -a prompt_env "FORGE_SESSION__MODEL_ID=$_FORGE_SESSION_MODEL"
+    end
+    if test -n "$_FORGE_SESSION_PROVIDER"
+        set -a prompt_env "FORGE_SESSION__PROVIDER_ID=$_FORGE_SESSION_PROVIDER"
+    end
+    if test -n "$_FORGE_SESSION_REASONING_EFFORT"
+        set -a prompt_env "FORGE_REASONING__EFFORT=$_FORGE_SESSION_REASONING_EFFORT"
+    end
+    if test -n "$_FORGE_CONVERSATION_ID"
+        set -a prompt_env "_FORGE_CONVERSATION_ID=$_FORGE_CONVERSATION_ID"
+    end
+    if test -n "$_FORGE_ACTIVE_AGENT"
+        set -a prompt_env "_FORGE_ACTIVE_AGENT=$_FORGE_ACTIVE_AGENT"
+    end
+    if set -q COLUMNS; and test -n "$COLUMNS"
+        set -a prompt_env "COLUMNS=$COLUMNS"
+    end
+
+    env $prompt_env $forge_bin zsh rprompt 2>/dev/null
     if test $status -ne 0
         return 0
     end

@@ -364,6 +364,22 @@ function test_config_reasoning_effort_calls_binary
     or return 1
 end
 
+function test_session_model_picker_stores_model_id_and_provider_id
+    forge_test_reset
+
+    function _forge_model_pick
+        printf 'gpt-5.4              GPT-5.4              Codex     codex        272k            [yes]           [yes]\n'
+    end
+
+    _forge_command_session_model >/dev/null
+    functions --erase _forge_model_pick
+
+    forge_test_assert_eq 'gpt-5.4' "$_FORGE_SESSION_MODEL" 'session model picker should store only the model id field'
+    or return 1
+    forge_test_assert_eq 'codex' "$_FORGE_SESSION_PROVIDER" 'session model picker should store only the provider id field'
+    or return 1
+end
+
 function test_accept_line_uses_execute_handoff_after_interactive_exec
     forge_test_reset
 
@@ -602,23 +618,22 @@ function test_rprompt_renders_zsh_output
     or return 1
 end
 
-function test_rprompt_does_not_inject_fish_session_overrides
+function test_rprompt_passes_shell_context_to_zsh_rprompt
     forge_test_reset
     set -g _FORGE_ACTIVE_AGENT 'sage'
-    set -g _FORGE_CONVERSATION_ID 'cid-fish-only'
+    set -g _FORGE_CONVERSATION_ID 'cid-shell-context'
     set -g _FORGE_SESSION_MODEL 'gpt-5-from-fish'
     set -g _FORGE_SESSION_PROVIDER 'provider-from-fish'
-    set -gx FORGE_STUB_DEFAULT_MODEL 'gpt-5-from-forge'
+    set -g _FORGE_SESSION_REASONING_EFFORT 'medium'
+    set -gx COLUMNS 123
 
     set -l output (forge_test_prompt_info | string collect)
 
-    forge_test_assert_contains 'gpt-5-from-forge' "$output" 'rprompt should render exactly what forge zsh rprompt reports'
+    forge_test_assert_contains 'gpt-5-from-fish' "$output" 'rprompt should render the model reported by forge zsh rprompt from shell context'
     or return 1
-    if string match -q '*gpt-5-from-fish*' -- "$output"
-        forge_test_fail 'rprompt should not inject fish session model overrides into forge zsh rprompt'
-        return 1
-    end
-    forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["zsh", "rprompt"] and entries[0]["env"]["FORGE_SESSION__MODEL_ID"] == "" and entries[0]["env"]["FORGE_SESSION__PROVIDER_ID"] == "" and entries[0]["env"]["_FORGE_CONVERSATION_ID"] == "" and entries[0]["env"]["_FORGE_ACTIVE_AGENT"] == ""' 'rprompt should call forge zsh rprompt without fish-only prompt environment overrides'
+    forge_test_assert_contains 'SAGE' "$output" 'rprompt should render the active agent reported by forge zsh rprompt from shell context'
+    or return 1
+    forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["zsh", "rprompt"] and entries[0]["env"]["FORGE_SESSION__MODEL_ID"] == "gpt-5-from-fish" and entries[0]["env"]["FORGE_SESSION__PROVIDER_ID"] == "provider-from-fish" and entries[0]["env"]["FORGE_REASONING__EFFORT"] == "medium" and entries[0]["env"]["_FORGE_CONVERSATION_ID"] == "cid-shell-context" and entries[0]["env"]["_FORGE_ACTIVE_AGENT"] == "sage" and entries[0]["env"]["COLUMNS"] == "123"' 'rprompt should pass zsh-plugin-compatible shell context to forge zsh rprompt'
     or return 1
 end
 
@@ -739,6 +754,7 @@ for test_name in \
     test_model_reset_dispatch_matches_zsh_config_reload_behavior \
     test_reasoning_effort_sets_session_override \
     test_config_reasoning_effort_calls_binary \
+    test_session_model_picker_stores_model_id_and_provider_id \
     test_exec_marks_output_mode_for_following_reset \
     test_accept_line_uses_execute_handoff_after_interactive_exec \
     test_deferred_exec_repairs_history_with_original_prompt \
@@ -747,7 +763,7 @@ for test_name in \
     test_reset_adds_single_separator_for_visible_output_handoff \
     test_rprompt_falls_back_to_default_model_without_session_override \
     test_rprompt_renders_zsh_output \
-    test_rprompt_does_not_inject_fish_session_overrides \
+    test_rprompt_passes_shell_context_to_zsh_rprompt \
     test_rprompt_always_uses_latest_zsh_rprompt_output \
     test_rprompt_refreshes_immediately_after_command \
     test_right_prompt_reinstall_recovers_from_missing_saved_original \
