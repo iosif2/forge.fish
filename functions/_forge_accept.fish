@@ -191,8 +191,6 @@ function _forge_accept_finish --argument buffer clear_when_idle
 
     if test "$_FORGE_OUTPUT_MODE" = visible
         set --erase _FORGE_OUTPUT_MODE
-        set -g _FORGE_RPROMPT_ZSH_CACHE ""
-        set -g _FORGE_RPROMPT_DIRTY 1
         set -g _FORGE_SKIP_BLANK_LINE 1
         commandline -r ""
         commandline -f execute

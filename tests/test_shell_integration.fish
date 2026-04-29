@@ -374,7 +374,6 @@ function test_accept_line_uses_execute_handoff_after_interactive_exec
         set -g _FORGE_CONVERSATION_ID cid-stub-001
         function _forge_run_interactive
             set -g _FORGE_OUTPUT_MODE visible
-            set -g _FORGE_RPROMPT_DIRTY 1
         end
         function _forge_reader_reset
             set -g __forge_reset_called 1
@@ -583,26 +582,61 @@ function test_rprompt_falls_back_to_default_model_without_session_override
     or return 1
 end
 
-function test_rprompt_uses_cached_zsh_output
+function test_rprompt_renders_zsh_output
     forge_test_reset
     set -g _FORGE_ACTIVE_AGENT 'sage'
     set -g _FORGE_SESSION_MODEL 'gpt-5'
     set -gx FORGE_STUB_RPROMPT_RAW ' %B%F{15}SAGE%f%b %B%F{15}1.5k%f%b %B%F{2}$0.01%f%b %F{134}gpt-5%f'
 
-    set -l first_output (forge_test_prompt_info | string collect)
-    set -l second_output (forge_test_prompt_info | string collect)
+    set -l output (forge_test_prompt_info | string collect)
 
-    forge_test_assert_contains 'SAGE' "$first_output" 'rprompt should include the parsed active agent label'
+    forge_test_assert_contains 'SAGE' "$output" 'rprompt should include the parsed active agent label'
     or return 1
-    forge_test_assert_contains '1.5k' "$first_output" 'rprompt should include the parsed token count'
+    forge_test_assert_contains '1.5k' "$output" 'rprompt should include the parsed token count'
     or return 1
-    forge_test_assert_contains 'gpt-5' "$first_output" 'rprompt should include the parsed model'
+    forge_test_assert_contains 'gpt-5' "$output" 'rprompt should include the parsed model'
     or return 1
-    forge_test_assert_contains '$0.01' "$first_output" 'rprompt should include the parsed cost'
+    forge_test_assert_contains '$0.01' "$output" 'rprompt should include the parsed cost'
     or return 1
-    forge_test_assert_eq "$first_output" "$second_output" 'rprompt output should stay stable when serving from cache'
+    forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["zsh", "rprompt"]' 'a single rprompt render should query zsh rprompt once'
     or return 1
-    forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["zsh", "rprompt"]' 'rprompt rendering should fill the zsh cache only once for unchanged state'
+end
+
+function test_rprompt_does_not_inject_fish_session_overrides
+    forge_test_reset
+    set -g _FORGE_ACTIVE_AGENT 'sage'
+    set -g _FORGE_CONVERSATION_ID 'cid-fish-only'
+    set -g _FORGE_SESSION_MODEL 'gpt-5-from-fish'
+    set -g _FORGE_SESSION_PROVIDER 'provider-from-fish'
+    set -gx FORGE_STUB_DEFAULT_MODEL 'gpt-5-from-forge'
+
+    set -l output (forge_test_prompt_info | string collect)
+
+    forge_test_assert_contains 'gpt-5-from-forge' "$output" 'rprompt should render exactly what forge zsh rprompt reports'
+    or return 1
+    if string match -q '*gpt-5-from-fish*' -- "$output"
+        forge_test_fail 'rprompt should not inject fish session model overrides into forge zsh rprompt'
+        return 1
+    end
+    forge_test_assert_log_python 'len(entries) == 1 and entries[0]["argv"] == ["zsh", "rprompt"] and entries[0]["env"]["FORGE_SESSION__MODEL_ID"] == "" and entries[0]["env"]["FORGE_SESSION__PROVIDER_ID"] == "" and entries[0]["env"]["_FORGE_CONVERSATION_ID"] == "" and entries[0]["env"]["_FORGE_ACTIVE_AGENT"] == ""' 'rprompt should call forge zsh rprompt without fish-only prompt environment overrides'
+    or return 1
+end
+
+function test_rprompt_always_uses_latest_zsh_rprompt_output
+    forge_test_reset
+    set -g _FORGE_ACTIVE_AGENT 'sage'
+    set -gx FORGE_STUB_RPROMPT_RAW ' %B%F{240}SAGE%f%b %F{240}gpt-5-old%f'
+
+    set -l initial_output (forge_test_prompt_info | string collect)
+    forge_test_assert_contains 'gpt-5-old' "$initial_output" 'initial prompt should include the old model'
+    or return 1
+
+    set -gx FORGE_STUB_RPROMPT_RAW ' %B%F{240}SAGE%f%b %F{240}gpt-5-new%f'
+
+    set -l refreshed_output (forge_test_prompt_info | string collect)
+    forge_test_assert_contains 'gpt-5-new' "$refreshed_output" 'rprompt should render the latest zsh rprompt output without a fish-side cache'
+    or return 1
+    forge_test_assert_log_python 'len(entries) == 2 and entries[0]["argv"] == ["zsh", "rprompt"] and entries[1]["argv"] == ["zsh", "rprompt"]' 'rprompt should query Forge for each render'
     or return 1
 end
 
@@ -624,7 +658,7 @@ function test_rprompt_refreshes_immediately_after_command
     or return 1
     forge_test_assert_contains 'gpt-5.1' "$refreshed_output" 'prompt should refresh model info immediately after command execution'
     or return 1
-    forge_test_assert_log_python 'len(entries) == 3 and entries[0]["argv"] == ["zsh", "rprompt"] and entries[1]["argv"] == ["fish", "keyboard"] and entries[2]["argv"] == ["zsh", "rprompt"]' 'prompt refresh should happen again right after a command marks the cache dirty'
+    forge_test_assert_log_python 'len(entries) == 3 and entries[0]["argv"] == ["zsh", "rprompt"] and entries[1]["argv"] == ["fish", "keyboard"] and entries[2]["argv"] == ["zsh", "rprompt"]' 'prompt refresh should happen again right after command execution'
     or return 1
 end
 
@@ -712,7 +746,9 @@ for test_name in \
     test_fzf_wrappers_force_posix_shell_for_preview_commands \
     test_reset_adds_single_separator_for_visible_output_handoff \
     test_rprompt_falls_back_to_default_model_without_session_override \
-    test_rprompt_uses_cached_zsh_output \
+    test_rprompt_renders_zsh_output \
+    test_rprompt_does_not_inject_fish_session_overrides \
+    test_rprompt_always_uses_latest_zsh_rprompt_output \
     test_rprompt_refreshes_immediately_after_command \
     test_right_prompt_reinstall_recovers_from_missing_saved_original \
     test_deferred_prompt_title_uses_original_colon_buffer

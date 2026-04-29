@@ -18,6 +18,5 @@ function _forge_run
     set -l cmd_status $status
 
     set -g _FORGE_OUTPUT_MODE visible
-    set -g _FORGE_RPROMPT_DIRTY 1
     return $cmd_status
 end

@@ -60,7 +60,7 @@ function __forge_emit_prompt_segment --argument text is_bold color_code --descri
     printf '%s' "$text"
 end
 
-function __forge_render_zsh_rprompt --argument raw_prompt --description 'Convert cached zsh rprompt escapes into fish prompt colors'
+function __forge_render_zsh_rprompt --argument raw_prompt --description 'Convert zsh rprompt escapes into fish prompt colors'
     if test -z "$raw_prompt"
         return 0
     end
@@ -119,16 +119,7 @@ function __forge_render_zsh_rprompt --argument raw_prompt --description 'Convert
     set_color normal
 end
 
-function __forge_prompt_cache_signature --description 'Build a stable cache key for the Forge right prompt state'
-    printf '%s\x1f%s\x1f%s\x1f%s\x1f%s' \
-        "$_FORGE_ACTIVE_AGENT" \
-        "$_FORGE_CONVERSATION_ID" \
-        "$_FORGE_SESSION_MODEL" \
-        "$_FORGE_SESSION_PROVIDER" \
-        "$_FORGE_BIN"
-end
-
-function __forge_refresh_prompt_cache --description 'Refresh the cached zsh rprompt output from the forge binary'
+function __forge_zsh_rprompt --description 'Fetch the latest zsh rprompt output from the forge binary'
     set -l forge_bin "$_FORGE_BIN"
     if test -z "$forge_bin"; and set -q FORGE_BIN; and test -n "$FORGE_BIN"
         set forge_bin "$FORGE_BIN"
@@ -137,30 +128,10 @@ function __forge_refresh_prompt_cache --description 'Refresh the cached zsh rpro
         set forge_bin forge
     end
 
-    set -l prompt_env
-    if test -n "$_FORGE_SESSION_MODEL"
-        set -a prompt_env FORGE_SESSION__MODEL_ID=$_FORGE_SESSION_MODEL
+    $forge_bin zsh rprompt 2>/dev/null
+    if test $status -ne 0
+        return 0
     end
-    if test -n "$_FORGE_SESSION_PROVIDER"
-        set -a prompt_env FORGE_SESSION__PROVIDER_ID=$_FORGE_SESSION_PROVIDER
-    end
-    if test -n "$_FORGE_CONVERSATION_ID"
-        set -a prompt_env _FORGE_CONVERSATION_ID=$_FORGE_CONVERSATION_ID
-    end
-    if test -n "$_FORGE_ACTIVE_AGENT"
-        set -a prompt_env _FORGE_ACTIVE_AGENT=$_FORGE_ACTIVE_AGENT
-    end
-
-    set -l raw_prompt (env $prompt_env $forge_bin zsh rprompt 2>/dev/null | string collect)
-    set -l refresh_status $status
-
-    if test $refresh_status -eq 0
-        set -g _FORGE_RPROMPT_ZSH_CACHE "$raw_prompt"
-    else
-        set -g _FORGE_RPROMPT_ZSH_CACHE ''
-    end
-
-    set -g _FORGE_RPROMPT_CACHE_READY 1
 end
 
 function __forge_erase_execute_blank --on-event fish_prompt --description 'Erase the blank line Fish emits before the prompt when execute fires'
@@ -171,23 +142,9 @@ function __forge_erase_execute_blank --on-event fish_prompt --description 'Erase
     end
 end
 
-function __forge_maybe_refresh_prompt_cache --on-event fish_prompt --description 'Refresh the Forge right-prompt cache only when shell state changes'
-    set -l signature (__forge_prompt_cache_signature)
-
-    if test "$_FORGE_RPROMPT_SIGNATURE" = "$signature"
-        and test "$_FORGE_RPROMPT_DIRTY" != 1
-        and test "$_FORGE_RPROMPT_CACHE_READY" = 1
-        return 0
-    end
-
-    __forge_refresh_prompt_cache
-    set -g _FORGE_RPROMPT_SIGNATURE "$signature"
-    set -g _FORGE_RPROMPT_DIRTY 0
-end
-
-function __forge_status_prompt --description 'Render the cached Forge status for fish_right_prompt'
-    __forge_maybe_refresh_prompt_cache
-    __forge_render_zsh_rprompt "$_FORGE_RPROMPT_ZSH_CACHE"
+function __forge_status_prompt --description 'Render the latest Forge status for fish_right_prompt'
+    set -l raw_prompt (__forge_zsh_rprompt | string collect)
+    __forge_render_zsh_rprompt "$raw_prompt"
 end
 
 function __forge_title_command --argument current_command --description 'Return the title command, overriding deferred : prompts with the original buffer'
@@ -280,8 +237,6 @@ function _forge_install_right_prompt --description 'Wrap fish_right_prompt and a
         set -g _FORGE_ORIG_RIGHT_PROMPT_DEF (functions fish_right_prompt | string collect)
         functions -c fish_right_prompt __orig_fish_right_prompt
     end
-
-    __forge_maybe_refresh_prompt_cache
 
     function fish_right_prompt --description 'Wrapped right prompt with Forge status'
         set -l original_prompt ''
@@ -464,7 +419,7 @@ function _forge_uninstall --on-event forge_uninstall --description 'Clean up For
         set --erase $var
     end
 
-    functions --erase __forge_map_zsh_color __forge_emit_prompt_segment __forge_render_zsh_rprompt __forge_prompt_cache_signature __forge_refresh_prompt_cache __forge_maybe_refresh_prompt_cache __forge_status_prompt __forge_title_command __forge_is_wrapped_right_prompt __forge_restore_saved_right_prompt __forge_is_wrapped_title __forge_restore_saved_title : 2>/dev/null
+    functions --erase __forge_map_zsh_color __forge_emit_prompt_segment __forge_render_zsh_rprompt __forge_zsh_rprompt __forge_status_prompt __forge_title_command __forge_is_wrapped_right_prompt __forge_restore_saved_right_prompt __forge_is_wrapped_title __forge_restore_saved_title : 2>/dev/null
     functions --erase (functions -a | string match --entire --regex '^_forge_.*$') 2>/dev/null
 end
 
@@ -502,10 +457,6 @@ end
 
 set -g _FORGE_COMMANDS ''
 set -g _FORGE_COLON_COMMAND_NAMES
-set -g _FORGE_RPROMPT_ZSH_CACHE ''
-set -g _FORGE_RPROMPT_SIGNATURE ''
-set -g _FORGE_RPROMPT_CACHE_READY 0
-set -g _FORGE_RPROMPT_DIRTY 1
 set -g _FORGE_OUTPUT_MODE ''
 set -g _FORGE_CONVERSATION_ID ''
 set -g _FORGE_ACTIVE_AGENT ''
