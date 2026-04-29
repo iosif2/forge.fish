@@ -1,5 +1,5 @@
 function _forge_porcelain_find_index_field --argument row field_number
-    set -l columns (string split '\t' -- (string replace -ra '  +' '\t' -- (string trim -- "$row")))
+    set -l columns (string split \t -- (string replace -ra '  +' \t -- (string trim -- "$row")))
     if test (count $columns) -ge $field_number
         printf '%s\n' "$columns[$field_number]"
     end
