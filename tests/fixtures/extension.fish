@@ -60,10 +60,6 @@ function forge_test_reset
     set -g _FORGE_SESSION_MODEL ""
     set -g _FORGE_SESSION_PROVIDER ""
     set -g _FORGE_SESSION_REASONING_EFFORT ""
-    set -g _FORGE_RPROMPT_ZSH_CACHE ""
-    set -g _FORGE_RPROMPT_SIGNATURE ""
-    set -g _FORGE_RPROMPT_CACHE_READY 0
-    set -g _FORGE_RPROMPT_DIRTY 1
     set -g _FORGE_OUTPUT_MODE ""
     set -g _FORGE_THEME_LOADED ""
     set -g _FORGE_ORIG_RIGHT_PROMPT_DEF ""

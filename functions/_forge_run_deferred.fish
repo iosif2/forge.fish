@@ -69,7 +69,6 @@ function _forge_run_deferred
     end
 
     set -g _FORGE_OUTPUT_MODE visible
-    set -g _FORGE_RPROMPT_DIRTY 1
     _forge_sync_start
     _forge_update_start
 end
